@@ -124,7 +124,7 @@ export default function AdminPage() {
           <DerslerSekme programId={aktifProgram?.id} supabase={supabase} />
         )}
         {aktifSekme === 'yoklama' && (
-          <div className="bg-white rounded-xl p-6 text-gray-500">Devam yakında...</div>
+          <YoklamaSekmesi programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
         )}
         {aktifSekme === 'notlar' && (
           <div className="bg-white rounded-xl p-6 text-gray-500">Notlar yakında...</div>
@@ -965,6 +965,220 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
           </div>
         </div>
       )}
+    </div>
+  )
+}
+// ===== YOKLAMA =====
+function YoklamaSekmesi({ programId, supabase, kullanici }: { programId: string, supabase: any, kullanici: any }) {
+  const [siniflar, setSiniflar] = useState<any[]>([])
+  const [dersler, setDersler] = useState<any[]>([])
+  const [ogrenciler, setOgrenciler] = useState<any[]>([])
+  const [secilenSinif, setSecilenSinif] = useState<any>(null)
+  const [secilenDers, setSecilenDers] = useState<any>(null)
+  const [tarih, setTarih] = useState(new Date().toISOString().split('T')[0])
+  const [yoklamalar, setYoklamalar] = useState<Record<string, string>>({})
+  const [mevcutYoklamalar, setMevcutYoklamalar] = useState<any[]>([])
+  const [yukleniyor, setYukleniyor] = useState(true)
+  const [kaydediyor, setKaydediyor] = useState(false)
+
+  async function siniflarıYukle() {
+    if (!programId) return
+    const { data } = await supabase
+      .from('siniflar')
+      .select('*')
+      .eq('program_id', programId)
+      .order('ad')
+    setSiniflar(data || [])
+    if (data && data.length > 0) setSecilenSinif(data[0])
+    setYukleniyor(false)
+  }
+
+  async function dersleriYukle(sinifId: string) {
+    const { data } = await supabase
+      .from('dersler')
+      .select('*')
+      .eq('sinif_id', sinifId)
+      .eq('aktif', true)
+      .order('gun')
+    setDersler(data || [])
+    setSecilenDers(data?.[0] || null)
+  }
+
+  async function ogrencileriYukle(sinifId: string) {
+    const { data } = await supabase
+      .from('ogrenciler')
+      .select('id, numara, kullanicilar (ad, soyad)')
+      .eq('sinif_id', sinifId)
+      .eq('aktif', true)
+      .order('numara')
+    setOgrenciler(data || [])
+  }
+
+  async function mevcutYoklamalariYukle(dersId: string, tarih: string) {
+    const { data } = await supabase
+      .from('yoklamalar')
+      .select('*')
+      .eq('ders_id', dersId)
+      .eq('tarih', tarih)
+    setMevcutYoklamalar(data || [])
+
+    const map: Record<string, string> = {}
+    ;(data || []).forEach((y: any) => {
+      map[y.ogrenci_id] = y.durum
+    })
+    setYoklamalar(map)
+  }
+
+  useEffect(() => { siniflarıYukle() }, [programId])
+  useEffect(() => {
+    if (secilenSinif) {
+      dersleriYukle(secilenSinif.id)
+      ogrencileriYukle(secilenSinif.id)
+    }
+  }, [secilenSinif])
+  useEffect(() => {
+    if (secilenDers && tarih) mevcutYoklamalariYukle(secilenDers.id, tarih)
+  }, [secilenDers, tarih])
+
+  function durumSec(ogrenciId: string, durum: string) {
+    setYoklamalar(prev => ({ ...prev, [ogrenciId]: durum }))
+  }
+
+  async function kaydet() {
+    if (!secilenDers) return
+    setKaydediyor(true)
+
+    const isAdmin = ['super_admin', 'program_admin'].includes(kullanici?.rol)
+
+    for (const ogrenci of ogrenciler) {
+      const durum = yoklamalar[ogrenci.id]
+      if (!durum) continue
+
+      const mevcutVar = mevcutYoklamalar.find(y => y.ogrenci_id === ogrenci.id)
+
+      if (mevcutVar && !isAdmin) {
+        alert(`${ogrenci.kullanicilar?.ad} için yoklama zaten girilmiş. Sadece admin değiştirebilir.`)
+        continue
+      }
+
+      if (mevcutVar) {
+        await supabase.from('yoklamalar')
+          .update({ durum })
+          .eq('id', mevcutVar.id)
+      } else {
+        await supabase.from('yoklamalar').insert({
+          ogrenci_id: ogrenci.id,
+          ders_id: secilenDers.id,
+          tarih,
+          durum
+        })
+      }
+    }
+
+    await mevcutYoklamalariYukle(secilenDers.id, tarih)
+    setKaydediyor(false)
+    alert('Yoklama kaydedildi!')
+  }
+
+  const durumlar = [
+    { value: 'katildi', label: 'Katıldı', renk: 'bg-green-100 text-green-700 border-green-300' },
+    { value: 'katilmadi', label: 'Katılmadı', renk: 'bg-red-100 text-red-700 border-red-300' },
+    { value: 'gec', label: 'Geç', renk: 'bg-yellow-100 text-yellow-700 border-yellow-300' },
+    { value: 'izinli', label: 'İzinli', renk: 'bg-blue-100 text-blue-700 border-blue-300' },
+  ]
+
+  if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
+
+  return (
+    <div className="space-y-4">
+      {/* Filtreler */}
+      <div className="bg-white rounded-xl shadow-sm p-4 flex flex-wrap gap-4">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Sınıf</label>
+          <select
+            value={secilenSinif?.id || ''}
+            onChange={(e) => {
+              const s = siniflar.find(s => s.id === e.target.value)
+              setSecilenSinif(s)
+            }}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+          >
+            {siniflar.map(s => <option key={s.id} value={s.id}>{s.ad}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Ders</label>
+          <select
+            value={secilenDers?.id || ''}
+            onChange={(e) => {
+              const d = dersler.find(d => d.id === e.target.value)
+              setSecilenDers(d)
+            }}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+          >
+            {dersler.map(d => <option key={d.id} value={d.id}>{d.ad}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Tarih</label>
+          <input
+            type="date"
+            value={tarih}
+            onChange={(e) => setTarih(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+          />
+        </div>
+      </div>
+
+      {/* Yoklama Listesi */}
+      <div className="bg-white rounded-xl shadow-sm">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="font-semibold text-gray-800">
+            {secilenDers?.ad || 'Ders seç'} — {tarih}
+          </h2>
+          <button
+            onClick={kaydet}
+            disabled={kaydediyor || ogrenciler.length === 0}
+            className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50"
+          >
+            {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
+          </button>
+        </div>
+
+        {ogrenciler.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">Bu sınıfta öğrenci yok</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {ogrenciler.map((o) => (
+              <div key={o.id} className="px-4 py-3 flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-medium text-gray-800">
+                    #{o.numara} {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
+                  </span>
+                  {mevcutYoklamalar.find(y => y.ogrenci_id === o.id) && (
+                    <span className="ml-2 text-xs text-gray-400">kaydedildi</span>
+                  )}
+                </div>
+                <div className="flex gap-1">
+                  {durumlar.map((d) => (
+                    <button
+                      key={d.value}
+                      onClick={() => durumSec(o.id, d.value)}
+                      className={`text-xs px-2 py-1 rounded-lg border transition ${
+                        yoklamalar[o.id] === d.value
+                          ? d.renk + ' font-medium'
+                          : 'border-gray-200 text-gray-400 hover:bg-gray-50'
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
