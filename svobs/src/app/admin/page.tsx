@@ -133,8 +133,8 @@ export default function AdminPage() {
           <div className="bg-white rounded-xl p-6 text-gray-500">Duyurular yakında...</div>
         )}
         {aktifSekme === 'hocalar' && (
-          <div className="bg-white rounded-xl p-6 text-gray-500">Hocalar yakında...</div>
-        )}
+          <HocalarSekme programId={aktifProgram?.id} supabase={supabase} />
+        )} 
       </main>
     </div>
   )
@@ -709,6 +709,257 @@ function DerslerSekme({ programId, supabase }: { programId: string, supabase: an
               <button onClick={dersEkle} disabled={kaydediyor}
                 className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50">
                 {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+// ===== HOCALAR =====
+function HocalarSekme({ programId, supabase }: { programId: string, supabase: any }) {
+  const [hocalar, setHocalar] = useState<any[]>([])
+  const [dersler, setDersler] = useState<any[]>([])
+  const [yukleniyor, setYukleniyor] = useState(true)
+  const [modalAcik, setModalAcik] = useState(false)
+  const [dersModalAcik, setDersModalAcik] = useState(false)
+  const [secilenHoca, setSecilenHoca] = useState<any>(null)
+  const [secilenDers, setSecilenDers] = useState('')
+  const [kaydediyor, setKaydediyor] = useState(false)
+  const [form, setForm] = useState({
+    ad: '', soyad: '', email: '', telefon: '', sifre: ''
+  })
+
+  async function yukle() {
+    if (!programId) return
+
+    const { data: h } = await supabase
+      .from('kullanicilar')
+      .select(`
+        *,
+        ogretmen_dersleri (
+          ders_id,
+          dersler (ad, siniflar (ad, program_id))
+        )
+      `)
+      .eq('rol', 'ogretmen')
+
+    const { data: d } = await supabase
+      .from('dersler')
+      .select('*, siniflar (ad, program_id)')
+      .eq('siniflar.program_id', programId)
+
+    setHocalar(h || [])
+    setDersler(d || [])
+    setYukleniyor(false)
+  }
+
+  useEffect(() => { yukle() }, [programId])
+
+  async function hocaEkle() {
+    if (!form.ad || !form.email || !form.sifre) {
+      alert('Ad, email ve şifre zorunlu!')
+      return
+    }
+    setKaydediyor(true)
+
+    const res = await fetch('/api/admin/kullanici-olustur', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: form.email,
+        password: form.sifre,
+        ad: form.ad,
+        soyad: form.soyad,
+        telefon: form.telefon,
+        rol: 'ogretmen'
+      })
+    })
+
+    const json = await res.json()
+    if (!res.ok || !json.user) {
+      alert('Hoca eklenemedi: ' + (json.error || 'Hata'))
+      setKaydediyor(false)
+      return
+    }
+
+    setForm({ ad: '', soyad: '', email: '', telefon: '', sifre: '' })
+    setModalAcik(false)
+    setKaydediyor(false)
+    yukle()
+  }
+
+  async function dersAta() {
+    if (!secilenDers || !secilenHoca) return
+    setKaydediyor(true)
+    await supabase.from('ogretmen_dersleri').upsert({
+      ogretmen_id: secilenHoca.id,
+      ders_id: secilenDers
+    })
+    setDersModalAcik(false)
+    setSecilenDers('')
+    setKaydediyor(false)
+    yukle()
+  }
+
+  async function dersKaldir(ogretmenId: string, dersId: string) {
+    if (!confirm('Bu dersi hocadan kaldırmak istediğine emin misin?')) return
+    await supabase.from('ogretmen_dersleri')
+      .delete()
+      .eq('ogretmen_id', ogretmenId)
+      .eq('ders_id', dersId)
+    yukle()
+  }
+
+  async function hocaSil(id: string) {
+    if (!confirm('Bu hocayı silmek istediğine emin misin?')) return
+    await supabase.from('ogretmen_dersleri').delete().eq('ogretmen_id', id)
+    await supabase.from('kullanicilar').delete().eq('id', id)
+    yukle()
+  }
+
+  if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
+
+  return (
+    <div>
+      <div className="bg-white rounded-xl shadow-sm">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="font-semibold text-gray-800">Hocalar</h2>
+          <button
+            onClick={() => setModalAcik(true)}
+            className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800"
+          >
+            + Hoca Ekle
+          </button>
+        </div>
+
+        {hocalar.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">Henüz hoca eklenmemiş</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {hocalar.map((h) => (
+              <div key={h.id} className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="font-medium text-gray-800">{h.ad} {h.soyad}</p>
+                    <p className="text-sm text-gray-500">{h.email}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setSecilenHoca(h); setDersModalAcik(true) }}
+                      className="text-sm text-green-700 border border-green-700 px-3 py-1 rounded-lg hover:bg-green-50"
+                    >
+                      + Ders Ata
+                    </button>
+                    <button
+                      onClick={() => hocaSil(h.id)}
+                      className="text-sm text-red-500 border border-red-300 px-3 py-1 rounded-lg hover:bg-red-50"
+                    >
+                      Sil
+                    </button>
+                  </div>
+                </div>
+                {h.ogretmen_dersleri?.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {h.ogretmen_dersleri.map((od: any) => (
+                      <span key={od.ders_id} className="flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-full">
+                        {od.dersler?.ad} — {od.dersler?.siniflar?.ad}
+                        <button
+                          onClick={() => dersKaldir(h.id, od.ders_id)}
+                          className="text-red-400 hover:text-red-600 ml-1"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Hoca Ekle Modal */}
+      {modalAcik && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="font-semibold text-gray-800 mb-4">Yeni Hoca Ekle</h3>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-600 mb-1">Ad</label>
+                  <input value={form.ad} onChange={(e) => setForm({...form, ad: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                    placeholder="Ad" />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-600 mb-1">Soyad</label>
+                  <input value={form.soyad} onChange={(e) => setForm({...form, soyad: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                    placeholder="Soyad" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Email</label>
+                <input value={form.email} onChange={(e) => setForm({...form, email: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                  placeholder="ornek@mail.com" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Telefon</label>
+                <input value={form.telefon} onChange={(e) => setForm({...form, telefon: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                  placeholder="05xx xxx xx xx" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Geçici Şifre</label>
+                <input type="password" value={form.sifre} onChange={(e) => setForm({...form, sifre: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                  placeholder="En az 6 karakter" />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setModalAcik(false)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
+                İptal
+              </button>
+              <button onClick={hocaEkle} disabled={kaydediyor}
+                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50">
+                {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ders Ata Modal */}
+      {dersModalAcik && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="font-semibold text-gray-800 mb-1">Ders Ata</h3>
+            <p className="text-sm text-gray-500 mb-4">{secilenHoca?.ad} {secilenHoca?.soyad}</p>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Ders Seç</label>
+              <select value={secilenDers} onChange={(e) => setSecilenDers(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+                <option value="">Ders seç...</option>
+                {dersler.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.ad} — {d.siniflar?.ad}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setDersModalAcik(false)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
+                İptal
+              </button>
+              <button onClick={dersAta} disabled={kaydediyor || !secilenDers}
+                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50">
+                {kaydediyor ? 'Atanıyor...' : 'Ata'}
               </button>
             </div>
           </div>

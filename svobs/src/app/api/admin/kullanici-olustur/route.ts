@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import supabaseAdmin from '@/lib/supabase/admin'
 
 export async function POST(req: NextRequest) {
-  const { email, password, ad, soyad, telefon, sinif_id } = await req.json()
+  const { email, password, ad, soyad, telefon, sinif_id, rol } = await req.json()
 
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
     email,
@@ -18,8 +18,8 @@ export async function POST(req: NextRequest) {
 
   const { error: kullaniciError } = await supabaseAdmin
     .from('kullanicilar')
-    .insert({ id: userId, ad, soyad, email, telefon, rol: 'ogrenci' })
-
+    .insert({ id: userId, ad, soyad, email, telefon, rol: rol || 'ogrenci' }) 
+    
   if (kullaniciError) {
     await supabaseAdmin.auth.admin.deleteUser(userId)
     return NextResponse.json({ error: 'kullanicilar: ' + kullaniciError.message }, { status: 400 })
