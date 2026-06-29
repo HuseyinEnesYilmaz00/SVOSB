@@ -130,7 +130,7 @@ export default function AdminPage() {
           <NotlarSekmesi programId={aktifProgram?.id} supabase={supabase} />
         )}
         {aktifSekme === 'duyurular' && (
-          <div className="bg-white rounded-xl p-6 text-gray-500">Duyurular yakında...</div>
+          <DuyurularSekmesi programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
         )}
         {aktifSekme === 'hocalar' && (
           <HocalarSekme programId={aktifProgram?.id} supabase={supabase} />
@@ -1420,6 +1420,139 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
               </div>
             ))
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+// ===== DUYURULAR =====
+function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: string, supabase: any, kullanici: any }) {
+  const [duyurular, setDuyurular] = useState<any[]>([])
+  const [yukleniyor, setYukleniyor] = useState(true)
+  const [modalAcik, setModalAcik] = useState(false)
+  const [kaydediyor, setKaydediyor] = useState(false)
+  const [form, setForm] = useState({ baslik: '', icerik: '' })
+
+  async function yukle() {
+    if (!programId) return
+    const { data } = await supabase
+      .from('duyurular')
+      .select('*, kullanicilar (ad, soyad)')
+      .eq('program_id', programId)
+      .order('olusturulma_tarihi', { ascending: false })
+    setDuyurular(data || [])
+    setYukleniyor(false)
+  }
+
+  useEffect(() => { yukle() }, [programId])
+
+  async function duyuruEkle() {
+    if (!form.baslik.trim() || !form.icerik.trim()) {
+      alert('Başlık ve içerik zorunlu!')
+      return
+    }
+    setKaydediyor(true)
+    await supabase.from('duyurular').insert({
+      program_id: programId,
+      baslik: form.baslik.trim(),
+      icerik: form.icerik.trim(),
+      yayinlayan_id: kullanici.id
+    })
+    setForm({ baslik: '', icerik: '' })
+    setModalAcik(false)
+    setKaydediyor(false)
+    yukle()
+  }
+
+  async function duyuruSil(id: string) {
+    if (!confirm('Bu duyuruyu silmek istediğine emin misin?')) return
+    await supabase.from('duyurular').delete().eq('id', id)
+    yukle()
+  }
+
+  if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
+
+  return (
+    <div>
+      <div className="bg-white rounded-xl shadow-sm">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="font-semibold text-gray-800">Duyurular</h2>
+          <button
+            onClick={() => setModalAcik(true)}
+            className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800"
+          >
+            + Duyuru Ekle
+          </button>
+        </div>
+
+        {duyurular.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">Henüz duyuru eklenmemiş</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {duyurular.map((d) => (
+              <div key={d.id} className="p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <h3 className="font-medium text-gray-800 mb-1">{d.baslik}</h3>
+                    <p className="text-sm text-gray-600 whitespace-pre-wrap">{d.icerik}</p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      {d.kullanicilar?.ad} {d.kullanicilar?.soyad} — {new Date(d.olusturulma_tarihi).toLocaleDateString('tr-TR')}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => duyuruSil(d.id)}
+                    className="text-red-500 text-xs hover:text-red-700 shrink-0"
+                  >
+                    Sil
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {modalAcik && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="font-semibold text-gray-800 mb-4">Yeni Duyuru</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Başlık</label>
+                <input
+                  value={form.baslik}
+                  onChange={(e) => setForm({...form, baslik: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                  placeholder="Duyuru başlığı..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">İçerik</label>
+                <textarea
+                  value={form.icerik}
+                  onChange={(e) => setForm({...form, icerik: e.target.value})}
+                  rows={5}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none"
+                  placeholder="Duyuru içeriği..."
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setModalAcik(false)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50"
+              >
+                İptal
+              </button>
+              <button
+                onClick={duyuruEkle}
+                disabled={kaydediyor}
+                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50"
+              >
+                {kaydediyor ? 'Yayınlanıyor...' : 'Yayınla'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
