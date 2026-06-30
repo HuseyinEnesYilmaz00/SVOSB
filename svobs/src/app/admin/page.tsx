@@ -281,6 +281,7 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
 function OgrencilerSekme({ programId, supabase }: { programId: string, supabase: any }) {
   const [ogrenciler, setOgrenciler] = useState<any[]>([])
   const [siniflar, setSiniflar] = useState<any[]>([])
+  const [ortalamalar, setOrtalamalar] = useState<Record<string, number | null>>({})
   const [yukleniyor, setYukleniyor] = useState(true)
   const [modalAcik, setModalAcik] = useState(false)
   const [kaydediyor, setKaydediyor] = useState(false)
@@ -313,6 +314,51 @@ function OgrencilerSekme({ programId, supabase }: { programId: string, supabase:
       : { data: [] }
 
     setOgrenciler(o || [])
+    // Ortalamaları hesapla
+    if (o && o.length > 0) {
+      const ogrenciIdleri = o.map((og: any) => og.id)
+
+      const { data: tumNotlar } = await supabase
+        .from('notlar')
+        .select('ogrenci_id, puan')
+        .in('ogrenci_id', ogrenciIdleri)
+
+      const { data: tumYoklamalar } = await supabase
+        .from('yoklamalar')
+        .select('ogrenci_id, durum')
+        .in('ogrenci_id', ogrenciIdleri)
+
+      const devamPuanlari: Record<string, number> = {
+        katildi: 100, gec: 75, izinli: 50, katilmadi: 0
+      }
+
+      const yeniOrtalamalar: Record<string, number | null> = {}
+
+      for (const id of ogrenciIdleri) {
+        const notlariBu = (tumNotlar || []).filter((n: any) => n.ogrenci_id === id)
+        const yoklamalariBu = (tumYoklamalar || []).filter((y: any) => y.ogrenci_id === id)
+
+        const sinavOrt = notlariBu.length > 0
+          ? notlariBu.reduce((s: number, n: any) => s + n.puan, 0) / notlariBu.length
+          : null
+
+        const devamOrt = yoklamalariBu.length > 0
+          ? yoklamalariBu.reduce((s: number, y: any) => s + (devamPuanlari[y.durum] || 0), 0) / yoklamalariBu.length
+          : null
+
+        if (sinavOrt === null && devamOrt === null) {
+          yeniOrtalamalar[id] = null
+        } else if (sinavOrt === null) {
+          yeniOrtalamalar[id] = devamOrt
+        } else if (devamOrt === null) {
+          yeniOrtalamalar[id] = sinavOrt
+        } else {
+          yeniOrtalamalar[id] = sinavOrt * 0.7 + devamOrt * 0.3
+        }
+      }
+
+      setOrtalamalar(yeniOrtalamalar)
+    }
     setYukleniyor(false)
   }
 
@@ -399,6 +445,7 @@ function OgrencilerSekme({ programId, supabase }: { programId: string, supabase:
                 <th className="px-4 py-3 text-xs text-gray-500">Email</th>
                 <th className="px-4 py-3 text-xs text-gray-500">Telefon</th>
                 <th className="px-4 py-3 text-xs text-gray-500">Sınıf</th>
+                <th className="px-4 py-3 text-xs text-gray-500">Ortalama</th>
                 <th className="px-4 py-3 text-xs text-gray-500">Durum</th>
               </tr>
             </thead>
@@ -412,6 +459,18 @@ function OgrencilerSekme({ programId, supabase }: { programId: string, supabase:
                   <td className="px-4 py-3 text-sm text-gray-500">{o.kullanicilar?.email}</td>
                   <td className="px-4 py-3 text-sm text-gray-500">{o.kullanicilar?.telefon || '-'}</td>
                   <td className="px-4 py-3 text-sm text-gray-500">{o.siniflar?.ad || '-'}</td>
+                <td className="px-4 py-3 text-sm font-medium text-gray-800">
+                  {ortalamalar[o.id] !== null && ortalamalar[o.id] !== undefined
+                    ? ortalamalar[o.id]!.toFixed(1)
+                    : '-'}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    o.aktif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {o.aktif ? 'Aktif' : 'Pasif'}
+                  </span>
+                </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded-full ${
                       o.aktif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
