@@ -35,6 +35,8 @@ export default function GirisPage() {
 
     if (kullanici?.rol === 'super_admin' || kullanici?.rol === 'program_admin') {
       router.push('/admin')
+    } else if (kullanici?.rol === 'ogretmen') {
+      router.push('/ogretmen')
     } else {
       router.push('/ogrenci')
     }
