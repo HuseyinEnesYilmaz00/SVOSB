@@ -30,10 +30,19 @@ export default function AdminPage() {
 
       setKullanici(k)
 
-      const { data: p } = await supabase
-        .from('programlar')
-        .select('*')
-        .order('ad')
+      let programSorgu = supabase.from('programlar').select('*').order('ad')
+
+      if (k.rol === 'program_admin') {
+        const { data: kp } = await supabase
+          .from('kullanici_programlar')
+          .select('program_id')
+          .eq('kullanici_id', user.id)
+
+        const izinliIdler = (kp || []).map((x: any) => x.program_id)
+        programSorgu = programSorgu.in('id', izinliIdler)
+      }
+
+      const { data: p } = await programSorgu
 
       if (p && p.length > 0) {
         setProgramlar(p)
@@ -121,7 +130,7 @@ export default function AdminPage() {
           <SiniflarSekme programId={aktifProgram?.id} supabase={supabase} />
         )}
         {aktifSekme === 'dersler' && (
-          <DerslerSekme programId={aktifProgram?.id} supabase={supabase} />
+          <DerslerSekme programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
         )}
         {aktifSekme === 'yoklama' && (
           <YoklamaSekmesi programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
@@ -557,7 +566,7 @@ function OgrencilerSekme({ programId, supabase }: { programId: string, supabase:
 }
 
 // ===== DERSLER =====
-function DerslerSekme({ programId, supabase }: { programId: string, supabase: any }) {
+function DerslerSekme({ programId, supabase, kullanici }: { programId: string, supabase: any, kullanici: any }) {
   const [siniflar, setSiniflar] = useState<any[]>([])
   const [secilenSinif, setSecilenSinif] = useState<any>(null)
   const [dersler, setDersler] = useState<any[]>([])
@@ -567,6 +576,16 @@ function DerslerSekme({ programId, supabase }: { programId: string, supabase: an
   const [form, setForm] = useState({
     ad: '', aciklama: '', gun: '', saat: '', periyot: 'haftalik'
   })
+
+  const [iptalModalAcik, setIptalModalAcik] = useState(false)
+  const [iptalDersi, setIptalDersi] = useState<any>(null)
+  const [iptalGerekce, setIptalGerekce] = useState('')
+  const [iptalTarih, setIptalTarih] = useState(new Date().toISOString().split('T')[0])
+
+  const [telafiModalAcik, setTelafiModalAcik] = useState(false)
+  const [telafiDersi, setTelafiDersi] = useState<any>(null)
+  const [telafiTarih, setTelafiTarih] = useState(new Date().toISOString().split('T')[0])
+  const [telafiSaat, setTelafiSaat] = useState('')
 
   async function siniflarıYukle() {
     if (!programId) return
@@ -622,6 +641,40 @@ function DerslerSekme({ programId, supabase }: { programId: string, supabase: an
     if (!confirm('Bu dersi silmek istediğine emin misin?')) return
     await supabase.from('dersler').delete().eq('id', id)
     dersleriYukle(secilenSinif.id)
+  }
+
+  async function iptalKaydet() {
+    if (!iptalGerekce.trim()) { alert('Gerekçe yazman lazım!'); return }
+    await supabase.from('ders_oturumlari').insert({
+      ders_id: iptalDersi.id,
+      tarih: iptalTarih,
+      durum: 'iptal',
+      iptal_gerekce: iptalGerekce.trim()
+    })
+
+    await supabase.from('duyurular').insert({
+      program_id: programId,
+      baslik: `Ders İptali: ${iptalDersi.ad}`,
+      icerik: `${iptalDersi.ad} dersi ${new Date(iptalTarih).toLocaleDateString('tr-TR')} tarihinde iptal edilmiştir.\n\nGerekçe: ${iptalGerekce.trim()}`,
+      yayinlayan_id: kullanici.id
+    })
+
+    setIptalGerekce('')
+    setIptalModalAcik(false)
+    alert('Ders iptali kaydedildi ve duyuru yapıldı!')
+  }
+
+  async function telafiKaydet() {
+    if (!telafiSaat) { alert('Saat seçmen lazım!'); return }
+    await supabase.from('ders_oturumlari').insert({
+      ders_id: telafiDersi.id,
+      tarih: telafiTarih,
+      durum: 'ek_ders',
+      gerceklesen_saat: telafiSaat
+    })
+    setTelafiSaat('')
+    setTelafiModalAcik(false)
+    alert('Telafi dersi eklendi!')
   }
 
   const gunler = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar']
@@ -704,12 +757,26 @@ function DerslerSekme({ programId, supabase }: { programId: string, supabase: an
                         }
                       </td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => dersSil(d.id)}
-                          className="text-red-500 text-xs hover:text-red-700"
-                        >
-                          Sil
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { setIptalDersi(d); setIptalModalAcik(true) }}
+                            className="text-amber-600 text-xs hover:text-amber-800"
+                          >
+                            İptal Et
+                          </button>
+                          <button
+                            onClick={() => { setTelafiDersi(d); setTelafiModalAcik(true) }}
+                            className="text-blue-600 text-xs hover:text-blue-800"
+                          >
+                            Telafi Ekle
+                          </button>
+                          <button
+                            onClick={() => dersSil(d.id)}
+                            className="text-red-500 text-xs hover:text-red-700"
+                          >
+                            Sil
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -773,7 +840,72 @@ function DerslerSekme({ programId, supabase }: { programId: string, supabase: an
           </div>
         </div>
       )}
-    </div>
+    
+    
+    {iptalModalAcik && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="font-semibold text-gray-800 mb-1">Ders İptal Et</h3>
+            <p className="text-sm text-gray-500 mb-4">{iptalDersi?.ad}</p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Tarih</label>
+                <input type="date" value={iptalTarih} onChange={(e) => setIptalTarih(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Gerekçe</label>
+                <textarea value={iptalGerekce} onChange={(e) => setIptalGerekce(e.target.value)}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                  placeholder="İptal nedeni..." />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setIptalModalAcik(false)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
+                İptal
+              </button>
+              <button onClick={iptalKaydet}
+                className="flex-1 bg-amber-600 text-white py-2 rounded-lg text-sm hover:bg-amber-700">
+                Onayla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {telafiModalAcik && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="font-semibold text-gray-800 mb-1">Telafi Dersi Ekle</h3>
+            <p className="text-sm text-gray-500 mb-4">{telafiDersi?.ad}</p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Tarih</label>
+                <input type="date" value={telafiTarih} onChange={(e) => setTelafiTarih(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Saat</label>
+                <input type="time" value={telafiSaat} onChange={(e) => setTelafiSaat(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setTelafiModalAcik(false)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
+                İptal
+              </button>
+              <button onClick={telafiKaydet}
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700">
+                Ekle
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
   )
 }
 // ===== HOCALAR =====

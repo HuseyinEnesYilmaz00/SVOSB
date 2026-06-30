@@ -178,6 +178,7 @@ function OgrenciDuyurular({ programId, supabase }: { programId: string, supabase
 // ===== DERS PROGRAMI =====
 function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase: any }) {
   const [dersler, setDersler] = useState<any[]>([])
+  const [iptaller, setIptaller] = useState<any[]>([])
   const [yukleniyor, setYukleniyor] = useState(true)
 
   useEffect(() => {
@@ -195,6 +196,23 @@ function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase:
         .eq('aktif', true)
         .order('gun')
       setDersler(data || [])
+
+      const dersIdleri = (data || []).map((d: any) => d.id)
+      if (dersIdleri.length > 0) {
+        const bugun = new Date()
+        const haftaBasi = new Date(bugun)
+        haftaBasi.setDate(bugun.getDate() - bugun.getDay() + 1)
+        const haftaBasiStr = haftaBasi.toISOString().split('T')[0]
+
+        const { data: ipt } = await supabase
+          .from('ders_oturumlari')
+          .select('*')
+          .in('ders_id', dersIdleri)
+          .eq('durum', 'iptal')
+          .gte('tarih', haftaBasiStr)
+        setIptaller(ipt || [])
+      }
+
       setYukleniyor(false)
     }
     yukle()
@@ -226,23 +244,31 @@ function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase:
               <h3 className="font-medium text-gray-700 text-sm">{gun}</h3>
             </div>
             <div className="divide-y divide-gray-100">
-              {dersler.map((d) => (
-                <div key={d.id} className="px-4 py-3 flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-800 text-sm">{d.ad}</p>
-                    <p className="text-xs text-gray-400">
-                      {d.ogretmen_dersleri?.[0]?.kullanicilar
-                        ? `${d.ogretmen_dersleri[0].kullanicilar.ad} ${d.ogretmen_dersleri[0].kullanicilar.soyad}`
-                        : 'Hoca atanmadı'
-                      }
-                    </p>
+              {dersler.map((d) => {
+                const iptalVarMi = iptaller.find((i: any) => i.ders_id === d.id)
+                return (
+                  <div key={d.id} className={`px-4 py-3 flex items-center justify-between ${iptalVarMi ? 'opacity-50' : ''}`}>
+                    <div>
+                      <p className="font-medium text-gray-800 text-sm">
+                        {d.ad}
+                        {iptalVarMi && (
+                          <span className="ml-2 text-xs text-red-500 font-normal">İptal edildi</span>
+                        )}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {d.ogretmen_dersleri?.[0]?.kullanicilar
+                          ? `${d.ogretmen_dersleri[0].kullanicilar.ad} ${d.ogretmen_dersleri[0].kullanicilar.soyad}`
+                          : 'Hoca atanmadı'
+                        }
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-600">{d.saat}</p>
+                      <p className="text-xs text-gray-400">{periyotlar[d.periyot] || d.periyot}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-600">{d.saat}</p>
-                    <p className="text-xs text-gray-400">{periyotlar[d.periyot] || d.periyot}</p>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         ))
