@@ -318,9 +318,10 @@ function OgrencilerSekme({ programId, supabase }: { programId: string, supabase:
       ? await supabase
           .from('ogrenciler')
           .select(`
-            id, numara, aktif,
+            id, numara, aktif, kullanici_id,
             kullanicilar (ad, soyad, email, telefon),
-            siniflar (ad)
+            siniflar (ad),
+            ders_sorumlulari (ders_id, dersler (ad))
           `)
           .in('sinif_id', sinifIdleri)
           .order('numara')
@@ -514,7 +515,16 @@ async function ogrenciSil(ogrenci: any) {
                   <td className="px-4 py-3 text-sm text-gray-500">#{o.numara}</td>
                   <td className="px-4 py-3 text-sm font-medium text-gray-800">
                     {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
-                  </td>
+                    {o.ders_sorumlulari?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {o.ders_sorumlulari.map((ds: any) => (
+                          <span key={ds.ders_id} className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                            {ds.dersler?.ad}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td> 
                   <td className="px-4 py-3 text-sm text-gray-500">{o.kullanicilar?.email}</td>
                   <td className="px-4 py-3 text-sm text-gray-500">{o.kullanicilar?.telefon || '-'}</td>
                   <td className="px-4 py-3 text-sm text-gray-500">{o.siniflar?.ad || '-'}</td>
