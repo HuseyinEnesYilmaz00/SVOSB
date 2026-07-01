@@ -1,5 +1,6 @@
 'use client'
 
+import { programTema, temaBg, temaAccent, temaHover, temaPrimary } from '@/lib/tema'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
@@ -77,45 +78,63 @@ export default function AdminPage() {
     { id: 'hocalar', ad: 'Hocalar' },
   ]
 
+  const tema = programTema(aktifProgram?.ad || '')
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div>
-          <h1 className="font-bold text-gray-800">Siyer Vakfı</h1>
-          <p className="text-xs text-gray-500">Öğrenci Bilgi Sistemi</p>
+      <header className={`${temaAccent(tema)} border-b px-6 py-4 flex items-center justify-between`}>
+        <div className="flex items-center gap-3">
+          <div className={`w-8 h-8 rounded-lg ${temaBg(tema)} flex items-center justify-center`}>
+            <span className="text-white text-xs font-bold">SV</span>
+          </div>
+          <div>
+            <h1 className={`font-semibold text-sm ${temaPrimary(tema)}`}>Siyer Vakfı</h1>
+            <p className="text-xs text-gray-400">Yönetim Paneli</p>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-600">{kullanici?.ad} {kullanici?.soyad}</span>
-          <a href="/sifre-degistir" className="text-sm text-gray-500 hover:text-gray-700">Şifre Değiştir</a>
-          <button onClick={cikisYap} className="text-sm text-gray-500 hover:text-gray-700">Çıkış</button>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <p className="text-sm font-medium text-gray-700">{kullanici?.ad} {kullanici?.soyad}</p>
+            <p className="text-xs text-gray-400">{kullanici?.rol === 'super_admin' ? 'Süper Admin' : 'Program Yöneticisi'}</p>
+          </div>
+          <div className="flex gap-2">
+            <a href="/sifre-degistir" className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-white transition">Şifre</a>
+            <button onClick={cikisYap} className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-white transition">Çıkış</button>
+          </div>
         </div>
       </header>
 
-      <div className="bg-white border-b border-gray-200 px-6 py-2 flex gap-2">
-        {programlar.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => setAktifProgram(p)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
-              aktifProgram?.id === p.id
-                ? 'bg-green-700 text-white'
-                : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {p.ad}
-          </button>
-        ))}
+      <div className="bg-white border-b border-gray-100 px-6 py-2 flex gap-2">
+        {programlar.map((p) => {
+          const pTema = programTema(p.ad)
+          const aktif = aktifProgram?.id === p.id
+          return (
+            <button
+              key={p.id}
+              onClick={() => setAktifProgram(p)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
+                aktif
+                  ? pTema === 'esma' ? 'bg-purple-400 text-white' : 'bg-emerald-600 text-white'
+                  : 'border border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {p.ad}
+            </button>
+          )
+        })}
       </div>
 
-      <div className="bg-white border-b border-gray-200 px-6 flex gap-1 overflow-x-auto">
+      <div className="bg-white border-b border-gray-100 px-6 flex gap-1 overflow-x-auto">
         {sekmeler.map((s) => (
           <button
             key={s.id}
             onClick={() => setAktifSekme(s.id)}
             className={`px-4 py-3 text-sm whitespace-nowrap border-b-2 transition ${
               aktifSekme === s.id
-                ? 'border-green-700 text-green-700 font-medium'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? tema === 'esma'
+                  ? 'border-purple-400 text-purple-500 font-medium'
+                  : 'border-emerald-600 text-emerald-700 font-medium'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
             }`}
           >
             {s.ad}
