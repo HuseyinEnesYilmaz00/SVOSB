@@ -574,7 +574,7 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
   const [modalAcik, setModalAcik] = useState(false)
   const [kaydediyor, setKaydediyor] = useState(false)
   const [form, setForm] = useState({
-    ad: '', aciklama: '', gun: '', saat: '', periyot: 'haftalik'
+    ad: '', aciklama: '', gun: '', saat: '', periyot: 'haftalik', baslangic_tarihi: ''
   })
 
   const [iptalModalAcik, setIptalModalAcik] = useState(false)
@@ -621,6 +621,10 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
       alert('Ders adı, gün ve saat zorunlu!')
       return
     }
+    if (form.periyot !== 'haftalik' && !form.baslangic_tarihi) {
+      alert('Haftalık olmayan dersler için başlangıç tarihi seçmen lazım!')
+      return
+    }
     setKaydediyor(true)
     await supabase.from('dersler').insert({
       sinif_id: secilenSinif.id,
@@ -629,9 +633,10 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
       gun: form.gun,
       saat: form.saat,
       periyot: form.periyot,
+      baslangic_tarihi: form.periyot !== 'haftalik' ? form.baslangic_tarihi : null,
       aktif: true
     })
-    setForm({ ad: '', aciklama: '', gun: '', saat: '', periyot: 'haftalik' })
+    setForm({ ad: '', aciklama: '', gun: '', saat: '', periyot: 'haftalik', baslangic_tarihi: '' })
     setModalAcik(false)
     setKaydediyor(false)
     dersleriYukle(secilenSinif.id)
@@ -819,13 +824,20 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
                 </div>
               </div>
-              <div>
+                <div>
                 <label className="block text-sm text-gray-600 mb-1">Periyot</label>
                 <select value={form.periyot} onChange={(e) => setForm({...form, periyot: e.target.value})}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
                   {periyotlar.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
               </div>
+              {form.periyot !== 'haftalik' && (
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Başlangıç Tarihi (ilk ders günü)</label>
+                  <input type="date" value={form.baslangic_tarihi} onChange={(e) => setForm({...form, baslangic_tarihi: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+                </div>
+              )}
             </div>
             <div className="flex gap-2 mt-4">
               <button onClick={() => setModalAcik(false)}

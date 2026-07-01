@@ -175,6 +175,35 @@ function OgrenciDuyurular({ programId, supabase }: { programId: string, supabase
   )
 }
 
+function dersbuHaftaVarMi(ders: any): boolean {
+  if (ders.periyot === 'haftalik') return true
+  if (!ders.baslangic_tarihi) return true
+
+  const bugun = new Date()
+  const baslangic = new Date(ders.baslangic_tarihi)
+
+  // Haftanın başını bul (Pazartesi)
+  const buHaftaBasi = new Date(bugun)
+  buHaftaBasi.setDate(bugun.getDate() - ((bugun.getDay() + 6) % 7))
+  buHaftaBasi.setHours(0, 0, 0, 0)
+
+  const baslangicHaftaBasi = new Date(baslangic)
+  baslangicHaftaBasi.setDate(baslangic.getDate() - ((baslangic.getDay() + 6) % 7))
+  baslangicHaftaBasi.setHours(0, 0, 0, 0)
+
+  const farkMs = buHaftaBasi.getTime() - baslangicHaftaBasi.getTime()
+  const farkHafta = Math.round(farkMs / (7 * 24 * 60 * 60 * 1000))
+
+  if (farkHafta < 0) return false
+
+  switch (ders.periyot) {
+    case '2haftada1': return farkHafta % 2 === 0
+    case '3haftada1': return farkHafta % 3 === 0
+    case 'ayda1': return farkHafta % 4 === 0
+    default: return true
+  }
+}
+
 // ===== DERS PROGRAMI =====
 function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase: any }) {
   const [dersler, setDersler] = useState<any[]>([])
@@ -233,6 +262,12 @@ function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase:
     dersler: dersler.filter(d => d.gun === gun)
   })).filter(g => g.dersler.length > 0)
 
+  const buHaftaAktif = (d: any) => {
+    const iptalVar = iptaller.find((i: any) => i.ders_id === d.id)
+    if (iptalVar) return false
+    return dersbuHaftaVarMi(d)
+  }
+
   return (
     <div className="space-y-3">
       {derslerGuneSiralı.length === 0 ? (
@@ -246,13 +281,17 @@ function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase:
             <div className="divide-y divide-gray-100">
               {dersler.map((d) => {
                 const iptalVarMi = iptaller.find((i: any) => i.ders_id === d.id)
+                const buHafta = buHaftaAktif(d)
                 return (
-                  <div key={d.id} className={`px-4 py-3 flex items-center justify-between ${iptalVarMi ? 'opacity-50' : ''}`}>
+                  <div key={d.id} className={`px-4 py-3 flex items-center justify-between ${!buHafta ? 'opacity-40' : ''}`}>
                     <div>
                       <p className="font-medium text-gray-800 text-sm">
                         {d.ad}
                         {iptalVarMi && (
                           <span className="ml-2 text-xs text-red-500 font-normal">İptal edildi</span>
+                        )}
+                        {!buHafta && !iptalVarMi && (
+                          <span className="ml-2 text-xs text-gray-400 font-normal">Bu hafta yok</span>
                         )}
                       </p>
                       <p className="text-xs text-gray-400">
