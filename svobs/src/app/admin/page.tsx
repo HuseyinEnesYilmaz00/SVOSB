@@ -86,6 +86,7 @@ export default function AdminPage() {
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-600">{kullanici?.ad} {kullanici?.soyad}</span>
+          <a href="/sifre-degistir" className="text-sm text-gray-500 hover:text-gray-700">Şifre Değiştir</a>
           <button onClick={cikisYap} className="text-sm text-gray-500 hover:text-gray-700">Çıkış</button>
         </div>
       </header>
@@ -456,6 +457,25 @@ async function ogrenciSil(ogrenci: any) {
     yukle()
   }
 
+  async function sifreSifirla(kullaniciId: string, ad: string) {
+    const yeniSifre = prompt(`${ad} için yeni şifre gir (en az 6 karakter):`)
+    if (!yeniSifre) return
+    if (yeniSifre.length < 6) { alert('Şifre en az 6 karakter olmalı!'); return }
+
+    const res = await fetch('/api/admin/sifre-sifirla', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: kullaniciId, password: yeniSifre })
+    })
+
+    const json = await res.json()
+    if (!res.ok) {
+      alert('Hata: ' + (json.error || 'Bilinmeyen hata'))
+    } else {
+      alert('Şifre başarıyla değiştirildi!')
+    }
+  }
+
   async function sorumlulukAta() {
     if (!secilenSorumlulukDers || !secilenOgrenci) return
     await supabase.from('ders_sorumlulari').upsert({
@@ -547,6 +567,12 @@ async function ogrenciSil(ogrenci: any) {
                       className="text-blue-500 text-xs hover:text-blue-700"
                     >
                       Sorumluluk
+                    </button>
+                    <button
+                      onClick={() => sifreSifirla(o.kullanici_id, `${o.kullanicilar?.ad} ${o.kullanicilar?.soyad}`)}
+                      className="text-amber-500 text-xs hover:text-amber-700"
+                    >
+                      Şifre
                     </button>
                     <button
                       onClick={() => ogrenciSil(o)}

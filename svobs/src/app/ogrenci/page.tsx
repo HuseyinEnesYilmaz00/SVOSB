@@ -90,6 +90,7 @@ export default function OgrenciPage() {
             <p className="text-sm font-medium text-gray-700">{kullanici?.ad} {kullanici?.soyad}</p>
             <p className="text-xs text-gray-400">{sinif?.ad}</p>
           </div>
+          <a href="/sifre-degistir" className="text-sm text-gray-500 hover:text-gray-700">Şifre Değiştir</a>
           <button onClick={cikisYap} className="text-sm text-gray-500 hover:text-gray-700">Çıkış</button>
         </div>
       </header>

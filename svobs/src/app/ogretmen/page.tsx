@@ -85,6 +85,7 @@ export default function OgretmenPage() {
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-600">{kullanici?.ad} {kullanici?.soyad}</span>
+          <a href="/sifre-degistir" className="text-sm text-gray-500 hover:text-gray-700">Şifre Değiştir</a>
           <button onClick={cikisYap} className="text-sm text-gray-500 hover:text-gray-700">Çıkış</button>
         </div>
       </header>
