@@ -294,6 +294,10 @@ function OgrencilerSekme({ programId, supabase }: { programId: string, supabase:
   const [yukleniyor, setYukleniyor] = useState(true)
   const [modalAcik, setModalAcik] = useState(false)
   const [kaydediyor, setKaydediyor] = useState(false)
+  const [sorumlulukModalAcik, setSorumlulukModalAcik] = useState(false)
+  const [secilenOgrenci, setSecilenOgrenci] = useState<any>(null)
+  const [tumDersler, setTumDersler] = useState<any[]>([])
+  const [secilenSorumlulukDers, setSecilenSorumlulukDers] = useState('')
   const [form, setForm] = useState({
     ad: '', soyad: '', email: '', telefon: '', sinif_id: '', sifre: ''
   })
@@ -368,6 +372,12 @@ function OgrencilerSekme({ programId, supabase }: { programId: string, supabase:
 
       setOrtalamalar(yeniOrtalamalar)
     }
+    const { data: td } = await supabase
+      .from('dersler')
+      .select('id, ad, siniflar (ad)')
+      .in('sinif_id', sinifIdleri.length > 0 ? sinifIdleri : [''])
+    setTumDersler(td || [])
+
     setYukleniyor(false)
   }
 
@@ -426,7 +436,46 @@ function OgrencilerSekme({ programId, supabase }: { programId: string, supabase:
   yukle()
 }
 
-  if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
+async function ogrenciSil(ogrenci: any) {
+    if (!confirm(`${ogrenci.kullanicilar?.ad} ${ogrenci.kullanicilar?.soyad} silinecek. Emin misin?`)) return
+
+    // Önce ogrenciler tablosundan sil
+    await supabase.from('ogrenciler').delete().eq('id', ogrenci.id)
+
+    // Sonra kullanicilar tablosundan sil
+    await supabase.from('kullanicilar').delete().eq('id', ogrenci.kullanici_id)
+
+    // Auth'dan sil (API üzerinden)
+    await fetch('/api/admin/kullanici-sil', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: ogrenci.kullanici_id })
+    })
+
+    yukle()
+  }
+
+  async function sorumlulukAta() {
+    if (!secilenSorumlulukDers || !secilenOgrenci) return
+    await supabase.from('ders_sorumlulari').upsert({
+      ogrenci_id: secilenOgrenci.id,
+      ders_id: secilenSorumlulukDers
+    })
+    setSorumlulukModalAcik(false)
+    setSecilenSorumlulukDers('')
+    alert('Sorumluluk atandı!')
+  }
+
+  async function sorumlulukKaldir(ogrenciId: string, dersId: string) {
+    if (!confirm('Bu sorumluluğu kaldırmak istediğine emin misin?')) return
+    await supabase.from('ders_sorumlulari')
+      .delete()
+      .eq('ogrenci_id', ogrenciId)
+      .eq('ders_id', dersId)
+    yukle()
+  }
+
+    if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
 
   return (
     <div>
@@ -456,6 +505,7 @@ function OgrencilerSekme({ programId, supabase }: { programId: string, supabase:
                 <th className="px-4 py-3 text-xs text-gray-500">Sınıf</th>
                 <th className="px-4 py-3 text-xs text-gray-500">Ortalama</th>
                 <th className="px-4 py-3 text-xs text-gray-500">Durum</th>
+                <th className="px-4 py-3 text-xs text-gray-500">İşlem</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -480,6 +530,23 @@ function OgrencilerSekme({ programId, supabase }: { programId: string, supabase:
                     {o.aktif ? 'Aktif' : 'Pasif'}
                   </span>
                 </td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setSecilenOgrenci(o); setSorumlulukModalAcik(true) }}
+                      className="text-blue-500 text-xs hover:text-blue-700"
+                    >
+                      Sorumluluk
+                    </button>
+                    <button
+                      onClick={() => ogrenciSil(o)}
+                      className="text-red-500 text-xs hover:text-red-700"
+                    >
+                      Sil
+                    </button>
+                  </div>
+                </td>
+
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded-full ${
                       o.aktif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
@@ -557,6 +624,47 @@ function OgrencilerSekme({ programId, supabase }: { programId: string, supabase:
                   {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sorumlulukModalAcik && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="font-semibold text-gray-800 mb-1">Ders Sorumluluğu Ata</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {secilenOgrenci?.kullanicilar?.ad} {secilenOgrenci?.kullanicilar?.soyad}
+            </p>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Ders Seç</label>
+              <select
+                value={secilenSorumlulukDers}
+                onChange={(e) => setSecilenSorumlulukDers(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+              >
+                <option value="">Ders seç...</option>
+                {tumDersler.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.ad} — {d.siniflar?.ad}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setSorumlulukModalAcik(false)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50"
+              >
+                İptal
+              </button>
+              <button
+                onClick={sorumlulukAta}
+                disabled={!secilenSorumlulukDers}
+                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50"
+              >
+                Ata
+              </button>
             </div>
           </div>
         </div>
@@ -845,7 +953,8 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
                 İptal
               </button>
               <button onClick={dersEkle} disabled={kaydediyor}
-                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50">
+                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50"
+                >
                 {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
               </button>
             </div>
