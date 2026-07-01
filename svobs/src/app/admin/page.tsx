@@ -1504,39 +1504,39 @@ function YoklamaSekmesi({ programId, supabase, kullanici }: { programId: string,
     </div>
   )
 }
+
 // ===== NOTLAR =====
 function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: any }) {
   const [siniflar, setSiniflar] = useState<any[]>([])
   const [dersler, setDersler] = useState<any[]>([])
   const [ogrenciler, setOgrenciler] = useState<any[]>([])
+  const [sinavlar, setSinavlar] = useState<any[]>([])
   const [secilenSinif, setSecilenSinif] = useState<any>(null)
   const [secilenDers, setSecilenDers] = useState<any>(null)
-  const [notBasligi, setNotBasligi] = useState('')
-  const [notTarihi, setNotTarihi] = useState(new Date().toISOString().split('T')[0])
+  const [secilenSinav, setSecilenSinav] = useState<any>(null)
   const [notlar, setNotlar] = useState<Record<string, string>>({})
   const [gecmisNotlar, setGecmisNotlar] = useState<any[]>([])
   const [yukleniyor, setYukleniyor] = useState(true)
   const [kaydediyor, setKaydediyor] = useState(false)
-  const [sekme, setSekme] = useState<'giris' | 'gecmis'>('giris')
+  const [sekme, setSekme] = useState<'sinavlar' | 'not_giris' | 'gecmis'>('sinavlar')
+  const [sinavModalAcik, setSinavModalAcik] = useState(false)
+  const [sinavForm, setSinavForm] = useState({ baslik: '', tarih: '', saat: '', konum: '', aciklama: '' })
+  const [kullaniciId, setKullaniciId] = useState<string>('')
 
   async function siniflarıYukle() {
     if (!programId) return
-    const { data } = await supabase
-      .from('siniflar')
-      .select('*')
-      .eq('program_id', programId)
-      .order('ad')
+    const { data } = await supabase.from('siniflar').select('*').eq('program_id', programId).order('ad')
     setSiniflar(data || [])
     if (data && data.length > 0) setSecilenSinif(data[0])
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) setKullaniciId(user.id)
+
     setYukleniyor(false)
   }
 
   async function dersleriYukle(sinifId: string) {
-    const { data } = await supabase
-      .from('dersler')
-      .select('*')
-      .eq('sinif_id', sinifId)
-      .order('ad')
+    const { data } = await supabase.from('dersler').select('*').eq('sinif_id', sinifId).order('ad')
     setDersler(data || [])
     setSecilenDers(data?.[0] || null)
   }
@@ -1544,68 +1544,101 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
   async function ogrencileriYukle(sinifId: string) {
     const { data } = await supabase
       .from('ogrenciler')
-      .select('id, numara, kullanicilar (ad, soyad)')
+      .select('id, numara, kullanici_id')
       .eq('sinif_id', sinifId)
       .eq('aktif', true)
       .order('numara')
-    setOgrenciler(data || [])
+
+    if (data && data.length > 0) {
+      const ids = data.map((o: any) => o.kullanici_id)
+      const { data: kull } = await supabase.from('kullanicilar').select('id, ad, soyad').in('id', ids)
+      setOgrenciler(data.map((o: any) => ({
+        ...o,
+        kullanicilar: kull?.find((k: any) => k.id === o.kullanici_id)
+      })))
+    } else {
+      setOgrenciler([])
+    }
     setNotlar({})
+  }
+
+  async function sinavlariYukle(dersId: string) {
+    const { data } = await supabase
+      .from('sinavlar')
+      .select('*')
+      .eq('ders_id', dersId)
+      .order('tarih', { ascending: false })
+    setSinavlar(data || [])
   }
 
   async function gecmisNotlariYukle(dersId: string) {
     const { data } = await supabase
       .from('notlar')
-      .select('*, ogrenciler (numara, kullanicilar (ad, soyad))')
+      .select('*, ogrenciler (numara, kullanici_id), sinavlar (baslik, tarih)')
       .eq('ders_id', dersId)
-      .order('tarih', { ascending: false })
+      .order('olusturulma_tarihi', { ascending: false })
     setGecmisNotlar(data || [])
   }
 
   useEffect(() => { siniflarıYukle() }, [programId])
   useEffect(() => {
-    if (secilenSinif) {
-      dersleriYukle(secilenSinif.id)
-      ogrencileriYukle(secilenSinif.id)
-    }
+    if (secilenSinif) { dersleriYukle(secilenSinif.id); ogrencileriYukle(secilenSinif.id) }
   }, [secilenSinif])
   useEffect(() => {
-    if (secilenDers) gecmisNotlariYukle(secilenDers.id)
+    if (secilenDers) { sinavlariYukle(secilenDers.id); gecmisNotlariYukle(secilenDers.id) }
   }, [secilenDers])
 
-  async function kaydet() {
-    if (!secilenDers || !notBasligi.trim()) {
-      alert('Ders ve not başlığı zorunlu!')
-      return
-    }
+  async function sinavEkle() {
+    if (!sinavForm.baslik || !sinavForm.tarih) { alert('Başlık ve tarih zorunlu!'); return }
     setKaydediyor(true)
 
-    for (const ogrenci of ogrenciler) {
-      const puan = notlar[ogrenci.id]
-      if (!puan && puan !== '0') continue
+    const { data: sinav } = await supabase.from('sinavlar').insert({
+      ders_id: secilenDers.id,
+      baslik: sinavForm.baslik,
+      tarih: sinavForm.tarih,
+      saat: sinavForm.saat || null,
+      konum: sinavForm.konum || null,
+      aciklama: sinavForm.aciklama || null,
+      olusturan_id: kullaniciId
+    }).select().single()
 
+    // Otomatik duyuru
+    const duyuruIcerik = `${secilenDers.ad} dersi için sınav duyurusu:\n\nBaşlık: ${sinavForm.baslik}\nTarih: ${new Date(sinavForm.tarih).toLocaleDateString('tr-TR')}${sinavForm.saat ? '\nSaat: ' + sinavForm.saat : ''}${sinavForm.konum ? '\nKonum: ' + sinavForm.konum : ''}${sinavForm.aciklama ? '\n\nAçıklama: ' + sinavForm.aciklama : ''}`
+
+    await supabase.from('duyurular').insert({
+      program_id: programId,
+      baslik: `Sınav Duyurusu: ${sinavForm.baslik}`,
+      icerik: duyuruIcerik,
+      yayinlayan_id: kullaniciId
+    })
+
+    setSinavForm({ baslik: '', tarih: '', saat: '', konum: '', aciklama: '' })
+    setSinavModalAcik(false)
+    setKaydediyor(false)
+    sinavlariYukle(secilenDers.id)
+    alert('Sınav eklendi ve duyuru yapıldı!')
+  }
+
+  async function notKaydet() {
+    if (!secilenSinav) { alert('Önce bir sınav seç!'); return }
+    setKaydediyor(true)
+    for (const o of ogrenciler) {
+      const puan = notlar[o.id]
+      if (!puan && puan !== '0') continue
       await supabase.from('notlar').insert({
-        ogrenci_id: ogrenci.id,
+        ogrenci_id: o.id,
         ders_id: secilenDers.id,
-        baslik: notBasligi.trim(),
+        sinav_id: secilenSinav.id,
+        baslik: secilenSinav.baslik,
         puan: parseFloat(puan),
-        tarih: notTarihi
+        tarih: secilenSinav.tarih
       })
     }
-
     setNotlar({})
-    setNotBasligi('')
     setKaydediyor(false)
     gecmisNotlariYukle(secilenDers.id)
     alert('Notlar kaydedildi!')
   }
-
-  // Geçmiş notları başlığa göre grupla
-  const grupluNotlar = gecmisNotlar.reduce((acc: any, not: any) => {
-    const key = `${not.baslik}__${not.tarih}`
-    if (!acc[key]) acc[key] = { baslik: not.baslik, tarih: not.tarih, notlar: [] }
-    acc[key].notlar.push(not)
-    return acc
-  }, {})
 
   if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
 
@@ -1615,82 +1648,84 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
       <div className="bg-white rounded-xl shadow-sm p-4 flex flex-wrap gap-4">
         <div>
           <label className="block text-xs text-gray-500 mb-1">Sınıf</label>
-          <select
-            value={secilenSinif?.id || ''}
-            onChange={(e) => {
-              const s = siniflar.find(s => s.id === e.target.value)
-              setSecilenSinif(s)
-            }}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-          >
+          <select value={secilenSinif?.id || ''} onChange={(e) => setSecilenSinif(siniflar.find(s => s.id === e.target.value))}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
             {siniflar.map(s => <option key={s.id} value={s.id}>{s.ad}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Ders</label>
-          <select
-            value={secilenDers?.id || ''}
-            onChange={(e) => {
-              const d = dersler.find(d => d.id === e.target.value)
-              setSecilenDers(d)
-            }}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-          >
+          <select value={secilenDers?.id || ''} onChange={(e) => { setSecilenDers(dersler.find(d => d.id === e.target.value)); setSecilenSinav(null) }}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
             {dersler.map(d => <option key={d.id} value={d.id}>{d.ad}</option>)}
           </select>
         </div>
       </div>
 
-      {/* Sekme Seçici */}
+      {/* Sekmeler */}
       <div className="flex gap-2">
-        <button
-          onClick={() => setSekme('giris')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            sekme === 'giris' ? 'bg-green-700 text-white' : 'bg-white text-gray-600 border border-gray-300'
-          }`}
-        >
-          Not Girişi
-        </button>
-        <button
-          onClick={() => setSekme('gecmis')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            sekme === 'gecmis' ? 'bg-green-700 text-white' : 'bg-white text-gray-600 border border-gray-300'
-          }`}
-        >
-          Geçmiş Notlar
-        </button>
+        {[
+          { id: 'sinavlar', ad: 'Sınavlar' },
+          { id: 'not_giris', ad: 'Not Girişi' },
+          { id: 'gecmis', ad: 'Geçmiş Notlar' },
+        ].map(s => (
+          <button key={s.id} onClick={() => setSekme(s.id as any)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${sekme === s.id ? 'bg-green-700 text-white' : 'bg-white text-gray-600 border border-gray-300'}`}>
+            {s.ad}
+          </button>
+        ))}
       </div>
 
-      {sekme === 'giris' && (
+      {/* Sınavlar */}
+      {sekme === 'sinavlar' && (
         <div className="bg-white rounded-xl shadow-sm">
-          <div className="p-4 border-b border-gray-100 flex flex-wrap items-end gap-3">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Not Başlığı</label>
-              <input
-                value={notBasligi}
-                onChange={(e) => setNotBasligi(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                placeholder="örn: 1. Sınav, Ödev 1..."
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Tarih</label>
-              <input
-                type="date"
-                value={notTarihi}
-                onChange={(e) => setNotTarihi(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-              />
-            </div>
-            <button
-              onClick={kaydet}
-              disabled={kaydediyor || ogrenciler.length === 0}
-              className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50"
-            >
-              {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-800">Sınavlar</h2>
+            <button onClick={() => setSinavModalAcik(true)}
+              className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800">
+              + Sınav Ekle
             </button>
           </div>
+          {sinavlar.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">Henüz sınav eklenmemiş</div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {sinavlar.map((s) => (
+                <div key={s.id} className="p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-gray-800">{s.baslik}</p>
+                    <span className="text-xs text-gray-400">{new Date(s.tarih).toLocaleDateString('tr-TR')}</span>
+                  </div>
+                  {s.saat && <p className="text-sm text-gray-500 mt-1">Saat: {s.saat}</p>}
+                  {s.konum && <p className="text-sm text-gray-500">Konum: {s.konum}</p>}
+                  {s.aciklama && <p className="text-sm text-gray-400 mt-1">{s.aciklama}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
+      {/* Not Girişi */}
+      {sekme === 'not_giris' && (
+        <div className="bg-white rounded-xl shadow-sm">
+          <div className="p-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-800 mb-3">Not Girişi</h2>
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <label className="block text-xs text-gray-500 mb-1">Sınav Seç</label>
+                <select value={secilenSinav?.id || ''} onChange={(e) => setSecilenSinav(sinavlar.find(s => s.id === e.target.value))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+                  <option value="">Sınav seç...</option>
+                  {sinavlar.map(s => <option key={s.id} value={s.id}>{s.baslik} — {new Date(s.tarih).toLocaleDateString('tr-TR')}</option>)}
+                </select>
+              </div>
+              <button onClick={notKaydet} disabled={kaydediyor || !secilenSinav}
+                className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50 mt-4">
+                {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
+              </button>
+            </div>
+          </div>
           {ogrenciler.length === 0 ? (
             <div className="p-8 text-center text-gray-400">Bu sınıfta öğrenci yok</div>
           ) : (
@@ -1700,15 +1735,11 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
                   <span className="text-sm font-medium text-gray-800">
                     #{o.numara} {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
                   </span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
+                  <input type="number" min="0" max="100"
                     value={notlar[o.id] || ''}
                     onChange={(e) => setNotlar(prev => ({ ...prev, [o.id]: e.target.value }))}
                     className="w-20 border border-gray-300 rounded-lg px-3 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-600"
-                    placeholder="—"
-                  />
+                    placeholder="—" />
                 </div>
               ))}
             </div>
@@ -1716,37 +1747,97 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
         </div>
       )}
 
+      {/* Geçmiş Notlar */}
       {sekme === 'gecmis' && (
         <div className="space-y-3">
-          {Object.keys(grupluNotlar).length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center text-gray-400">
-              Henüz not girilmemiş
-            </div>
+          {gecmisNotlar.length === 0 ? (
+            <div className="bg-white rounded-xl p-8 text-center text-gray-400">Henüz not girilmemiş</div>
           ) : (
-            Object.values(grupluNotlar).map((grup: any) => (
-              <div key={`${grup.baslik}__${grup.tarih}`} className="bg-white rounded-xl shadow-sm">
-                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                  <h3 className="font-medium text-gray-800">{grup.baslik}</h3>
-                  <span className="text-xs text-gray-400">{grup.tarih}</span>
+            (() => {
+              const gruplu = gecmisNotlar.reduce((acc: any, n: any) => {
+                const key = n.sinav_id || n.baslik
+                if (!acc[key]) acc[key] = { baslik: n.baslik, tarih: n.tarih, notlar: [] }
+                acc[key].notlar.push(n)
+                return acc
+              }, {})
+              return Object.values(gruplu).map((grup: any) => (
+                <div key={grup.baslik + grup.tarih} className="bg-white rounded-xl shadow-sm">
+                  <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="font-medium text-gray-800">{grup.baslik}</h3>
+                    <span className="text-xs text-gray-400">{grup.tarih}</span>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {grup.notlar.map((n: any) => (
+                      <div key={n.id} className="px-4 py-3 flex items-center justify-between">
+                        <span className="text-sm text-gray-700">
+                          #{n.ogrenciler?.numara}
+                        </span>
+                        <span className="text-sm font-medium text-gray-800">{n.puan}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="divide-y divide-gray-100">
-                  {grup.notlar.map((n: any) => (
-                    <div key={n.id} className="px-4 py-3 flex items-center justify-between">
-                      <span className="text-sm text-gray-700">
-                        #{n.ogrenciler?.numara} {n.ogrenciler?.kullanicilar?.ad} {n.ogrenciler?.kullanicilar?.soyad}
-                      </span>
-                      <span className="text-sm font-medium text-gray-800">{n.puan}</span>
-                    </div>
-                  ))}
+              ))
+            })()
+          )}
+        </div>
+      )}
+
+      {/* Sınav Ekle Modal */}
+      {sinavModalAcik && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="font-semibold text-gray-800 mb-4">Sınav Ekle</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Başlık</label>
+                <input value={sinavForm.baslik} onChange={(e) => setSinavForm({...sinavForm, baslik: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                  placeholder="örn: 1. Dönem Sınavı" />
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-600 mb-1">Tarih</label>
+                  <input type="date" value={sinavForm.tarih} onChange={(e) => setSinavForm({...sinavForm, tarih: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-600 mb-1">Saat</label>
+                  <input type="time" value={sinavForm.saat} onChange={(e) => setSinavForm({...sinavForm, saat: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
                 </div>
               </div>
-            ))
-          )}
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Konum</label>
+                <input value={sinavForm.konum} onChange={(e) => setSinavForm({...sinavForm, konum: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                  placeholder="örn: Dershane, Online..." />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Açıklama (isteğe bağlı)</label>
+                <textarea value={sinavForm.aciklama} onChange={(e) => setSinavForm({...sinavForm, aciklama: e.target.value})}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none"
+                  placeholder="Sınav hakkında ek bilgi..." />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setSinavModalAcik(false)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
+                İptal
+              </button>
+              <button onClick={sinavEkle} disabled={kaydediyor}
+                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50">
+                {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   )
 }
+
 // ===== DUYURULAR =====
 function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: string, supabase: any, kullanici: any }) {
   const [duyurular, setDuyurular] = useState<any[]>([])
