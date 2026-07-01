@@ -75,7 +75,8 @@ export default function OgrenciPage() {
     { id: 'program', ad: 'Ders Programı' },
     { id: 'devam', ad: 'Devam Durumum' },
     { id: 'notlar', ad: 'Notlarım' },
-    ...(dersSorumluluklari.length > 0 ? [{ id: 'sorumluluk', ad: '📋 Sorumlu Paneli' }] : [])
+    ...(dersSorumluluklari.length > 0 ? [{ id: 'sorumluluk', ad: '📋 Sorumlu Paneli' }] : []),
+    { id: 'hesabim', ad: 'Hesabım' }
   ]
 
   return (
@@ -131,6 +132,17 @@ export default function OgrenciPage() {
             supabase={supabase}
           />
         )}
+
+        {aktifSekme === 'hesabim' && (
+          <HesabimSayfasi 
+            kullanici={kullanici}
+            ogrenci={ogrenci}
+            sinif={sinif}
+            program={program}
+            supabase={supabase}
+          />
+        )}
+
       </main>
     </div>
   )
@@ -601,6 +613,54 @@ function SorumlulukPaneli({ ogrenciId, dersler, supabase }: { ogrenciId: string,
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ===== HESABIM =====
+function HesabimSayfasi({ kullanici, ogrenci, sinif, program, supabase }: any) {
+  const router = useRouter()
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl shadow-sm">
+        <div className="p-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-800">Kişisel Bilgilerim</h2>
+        </div>
+        <div className="divide-y divide-gray-100">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-500">Ad Soyad</span>
+            <span className="text-sm font-medium text-gray-800">{kullanici?.ad} {kullanici?.soyad}</span>
+          </div>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-500">Email</span>
+            <span className="text-sm font-medium text-gray-800">{kullanici?.email}</span>
+          </div>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-500">Telefon</span>
+            <span className="text-sm font-medium text-gray-800">{kullanici?.telefon || '-'}</span>
+          </div>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-500">Öğrenci No</span>
+            <span className="text-sm font-medium text-gray-800">#{ogrenci?.numara}</span>
+          </div>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-500">Sınıf</span>
+            <span className="text-sm font-medium text-gray-800">{sinif?.ad}</span>
+          </div>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-500">Program</span>
+            <span className="text-sm font-medium text-gray-800">{program?.ad}</span>
+          </div>
+        </div>
+      </div>
+
+      <a
+        href="/sifre-degistir"
+        className="block w-full text-center bg-white border border-gray-300 text-gray-700 py-2 rounded-xl text-sm hover:bg-gray-50 shadow-sm"
+      >
+        Şifre Değiştir
+      </a>
     </div>
   )
 }
