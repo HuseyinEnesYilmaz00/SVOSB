@@ -4,6 +4,7 @@ import { programTema, temaBg, temaAccent, temaHover, temaPrimary } from '@/lib/t
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { ui } from '@/lib/ui'
 
 export default function AdminPage() {
   const [kullanici, setKullanici] = useState<any>(null)
@@ -81,7 +82,7 @@ export default function AdminPage() {
   const tema = programTema(aktifProgram?.ad || '')
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={ui.page}>
       <header className={`${temaAccent(tema)} border-b px-6 py-4 flex items-center justify-between`}>
         <div className="flex items-center gap-3">
           <div className={`w-8 h-8 rounded-lg ${temaBg(tema)} flex items-center justify-center`}>
@@ -142,9 +143,9 @@ export default function AdminPage() {
         ))}
       </div>
 
-      <main className="p-6">
+      <main className="p-4 md:p-6 max-w-6xl mx-auto">
         {aktifSekme === 'ogrenciler' && (
-          <OgrencilerSekme programId={aktifProgram?.id} supabase={supabase} />
+          <OgrencilerSekme programId={aktifProgram?.id} supabase={supabase} tema={tema} />
         )}
         {aktifSekme === 'siniflar' && (
           <SiniflarSekme programId={aktifProgram?.id} supabase={supabase} />
@@ -307,7 +308,7 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
 }
 
 // ===== ÖĞRENCİLER =====
-function OgrencilerSekme({ programId, supabase }: { programId: string, supabase: any }) {
+function OgrencilerSekme({ programId, supabase, tema }: { programId: string, supabase: any, tema: string }) {
   const [ogrenciler, setOgrenciler] = useState<any[]>([])
   const [siniflar, setSiniflar] = useState<any[]>([])
   const [ortalamalar, setOrtalamalar] = useState<Record<string, number | null>>({})
@@ -324,358 +325,214 @@ function OgrencilerSekme({ programId, supabase }: { programId: string, supabase:
 
   async function yukle() {
     if (!programId) return
-
-    const { data: s } = await supabase
-      .from('siniflar')
-      .select('*')
-      .eq('program_id', programId)
-      .order('ad')
+    const { data: s } = await supabase.from('siniflar').select('*').eq('program_id', programId).order('ad')
     setSiniflar(s || [])
-
     const sinifIdleri = (s || []).map((sinif: any) => sinif.id)
 
     const { data: o } = sinifIdleri.length > 0
-      ? await supabase
-          .from('ogrenciler')
-          .select(`
-            id, numara, aktif, kullanici_id,
-            kullanicilar (ad, soyad, email, telefon),
-            siniflar (ad),
-            ders_sorumlulari (ders_id, dersler (ad))
-          `)
-          .in('sinif_id', sinifIdleri)
-          .order('numara')
+      ? await supabase.from('ogrenciler').select(`
+          id, numara, aktif, kullanici_id,
+          kullanicilar (ad, soyad, email, telefon),
+          siniflar (ad),
+          ders_sorumlulari (ders_id, dersler (ad))
+        `).in('sinif_id', sinifIdleri).order('numara')
       : { data: [] }
 
     setOgrenciler(o || [])
-    // Ortalamaları hesapla
+
     if (o && o.length > 0) {
       const ogrenciIdleri = o.map((og: any) => og.id)
-
-      const { data: tumNotlar } = await supabase
-        .from('notlar')
-        .select('ogrenci_id, puan')
-        .in('ogrenci_id', ogrenciIdleri)
-
-      const { data: tumYoklamalar } = await supabase
-        .from('yoklamalar')
-        .select('ogrenci_id, durum')
-        .in('ogrenci_id', ogrenciIdleri)
-
-      const devamPuanlari: Record<string, number> = {
-        katildi: 100, gec: 75, izinli: 50, katilmadi: 0
-      }
-
+      const { data: tumNotlar } = await supabase.from('notlar').select('ogrenci_id, puan').in('ogrenci_id', ogrenciIdleri)
+      const { data: tumYoklamalar } = await supabase.from('yoklamalar').select('ogrenci_id, durum').in('ogrenci_id', ogrenciIdleri)
+      const devamPuanlari: Record<string, number> = { katildi: 100, gec: 75, izinli: 50, katilmadi: 0 }
       const yeniOrtalamalar: Record<string, number | null> = {}
-
       for (const id of ogrenciIdleri) {
         const notlariBu = (tumNotlar || []).filter((n: any) => n.ogrenci_id === id)
         const yoklamalariBu = (tumYoklamalar || []).filter((y: any) => y.ogrenci_id === id)
-
-        const sinavOrt = notlariBu.length > 0
-          ? notlariBu.reduce((s: number, n: any) => s + n.puan, 0) / notlariBu.length
-          : null
-
-        const devamOrt = yoklamalariBu.length > 0
-          ? yoklamalariBu.reduce((s: number, y: any) => s + (devamPuanlari[y.durum] || 0), 0) / yoklamalariBu.length
-          : null
-
-        if (sinavOrt === null && devamOrt === null) {
-          yeniOrtalamalar[id] = null
-        } else if (sinavOrt === null) {
-          yeniOrtalamalar[id] = devamOrt
-        } else if (devamOrt === null) {
-          yeniOrtalamalar[id] = sinavOrt
-        } else {
-          yeniOrtalamalar[id] = sinavOrt * 0.7 + devamOrt * 0.3
-        }
+        const sinavOrt = notlariBu.length > 0 ? notlariBu.reduce((s: number, n: any) => s + n.puan, 0) / notlariBu.length : null
+        const devamOrt = yoklamalariBu.length > 0 ? yoklamalariBu.reduce((s: number, y: any) => s + (devamPuanlari[y.durum] || 0), 0) / yoklamalariBu.length : null
+        if (sinavOrt === null && devamOrt === null) yeniOrtalamalar[id] = null
+        else if (sinavOrt === null) yeniOrtalamalar[id] = devamOrt
+        else if (devamOrt === null) yeniOrtalamalar[id] = sinavOrt
+        else yeniOrtalamalar[id] = sinavOrt * 0.7 + devamOrt * 0.3
       }
-
       setOrtalamalar(yeniOrtalamalar)
     }
-    const { data: td } = await supabase
-      .from('dersler')
-      .select('id, ad, siniflar (ad)')
-      .in('sinif_id', sinifIdleri.length > 0 ? sinifIdleri : [''])
-    setTumDersler(td || [])
 
+    const { data: td } = await supabase.from('dersler').select('id, ad, siniflar (ad)').in('sinif_id', sinifIdleri.length > 0 ? sinifIdleri : [''])
+    setTumDersler(td || [])
     setYukleniyor(false)
   }
 
   useEffect(() => { yukle() }, [programId])
 
- async function ogrenciEkle() {
-  if (!form.ad || !form.email || !form.sinif_id || !form.sifre) {
-    alert('Ad, email, sınıf ve şifre zorunlu!')
-    return
-  }
-  setKaydediyor(true)
-
-  const sonNumara = ogrenciler.length > 0
-    ? Math.max(...ogrenciler.map(o => o.numara)) + 1
-    : 1
-
-  const res = await fetch('/api/admin/kullanici-olustur', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: form.email,
-      password: form.sifre,
-      ad: form.ad,
-      soyad: form.soyad,
-      telefon: form.telefon,
-      sinif_id: form.sinif_id
+  async function ogrenciEkle() {
+    if (!form.ad || !form.email || !form.sinif_id || !form.sifre) { alert('Ad, email, sınıf ve şifre zorunlu!'); return }
+    setKaydediyor(true)
+    const sonNumara = ogrenciler.length > 0 ? Math.max(...ogrenciler.map(o => o.numara)) + 1 : 1
+    const res = await fetch('/api/admin/kullanici-olustur', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: form.email, password: form.sifre, ad: form.ad, soyad: form.soyad, telefon: form.telefon, sinif_id: form.sinif_id })
     })
-  })
-
-  const json = await res.json()
-
-  if (!res.ok || !json.user) {
-    alert('Kullanıcı oluşturulamadı: ' + (json.error || 'Hata'))
-    setKaydediyor(false)
-    return
+    const json = await res.json()
+    if (!res.ok || !json.user) { alert('Kullanıcı oluşturulamadı: ' + (json.error || 'Hata')); setKaydediyor(false); return }
+    await supabase.from('ogrenciler').insert({ kullanici_id: json.user.id, sinif_id: form.sinif_id, numara: sonNumara, aktif: true })
+    setForm({ ad: '', soyad: '', email: '', telefon: '', sinif_id: '', sifre: '' })
+    setModalAcik(false); setKaydediyor(false); yukle()
   }
 
-  const userId = json.user.id
-
-  const { error: ogrenciError } = await supabase.from('ogrenciler').insert({
-    kullanici_id: userId,
-    sinif_id: form.sinif_id,
-    numara: sonNumara,
-    aktif: true
-  })
-
-  if (ogrenciError) {
-    alert('Öğrenci kaydı hatası: ' + ogrenciError.message)
-    setKaydediyor(false)
-    return
-  }
-
-  setForm({ ad: '', soyad: '', email: '', telefon: '', sinif_id: '', sifre: '' })
-  setModalAcik(false)
-  setKaydediyor(false)
-  yukle()
-}
-
-async function ogrenciSil(ogrenci: any) {
+  async function ogrenciSil(ogrenci: any) {
     if (!confirm(`${ogrenci.kullanicilar?.ad} ${ogrenci.kullanicilar?.soyad} silinecek. Emin misin?`)) return
-
-    // Önce ogrenciler tablosundan sil
     await supabase.from('ogrenciler').delete().eq('id', ogrenci.id)
-
-    // Sonra kullanicilar tablosundan sil
     await supabase.from('kullanicilar').delete().eq('id', ogrenci.kullanici_id)
-
-    // Auth'dan sil (API üzerinden)
-    await fetch('/api/admin/kullanici-sil', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: ogrenci.kullanici_id })
-    })
-
+    await fetch('/api/admin/kullanici-sil', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: ogrenci.kullanici_id }) })
     yukle()
   }
 
   async function sifreSifirla(kullaniciId: string, ad: string) {
     const yeniSifre = prompt(`${ad} için yeni şifre gir (en az 6 karakter):`)
-    if (!yeniSifre) return
-    if (yeniSifre.length < 6) { alert('Şifre en az 6 karakter olmalı!'); return }
-
-    const res = await fetch('/api/admin/sifre-sifirla', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: kullaniciId, password: yeniSifre })
-    })
-
-    const json = await res.json()
-    if (!res.ok) {
-      alert('Hata: ' + (json.error || 'Bilinmeyen hata'))
-    } else {
-      alert('Şifre başarıyla değiştirildi!')
-    }
+    if (!yeniSifre || yeniSifre.length < 6) return
+    const res = await fetch('/api/admin/sifre-sifirla', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: kullaniciId, password: yeniSifre }) })
+    if (res.ok) alert('Şifre değiştirildi!')
   }
 
   async function sorumlulukAta() {
     if (!secilenSorumlulukDers || !secilenOgrenci) return
-    await supabase.from('ders_sorumlulari').upsert({
-      ogrenci_id: secilenOgrenci.id,
-      ders_id: secilenSorumlulukDers
-    })
-    setSorumlulukModalAcik(false)
-    setSecilenSorumlulukDers('')
-    alert('Sorumluluk atandı!')
+    await supabase.from('ders_sorumlulari').upsert({ ogrenci_id: secilenOgrenci.id, ders_id: secilenSorumlulukDers })
+    setSorumlulukModalAcik(false); setSecilenSorumlulukDers(''); yukle()
   }
 
-  async function sorumlulukKaldir(ogrenciId: string, dersId: string) {
-    if (!confirm('Bu sorumluluğu kaldırmak istediğine emin misin?')) return
-    await supabase.from('ders_sorumlulari')
-      .delete()
-      .eq('ogrenci_id', ogrenciId)
-      .eq('ders_id', dersId)
-    yukle()
+  const ortalamaRenk = (ort: number | null) => {
+    if (ort === null) return ui.badgeGray
+    if (ort >= 85) return ui.badgeGreen
+    if (ort >= 70) return ui.badgeBlue
+    if (ort >= 50) return ui.badgeYellow
+    return ui.badgeRed
   }
 
-    if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
+  if (yukleniyor) return (
+    <div className="flex items-center justify-center py-20">
+      <div className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
 
   return (
-    <div>
-      <div className="bg-white rounded-xl shadow-sm">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800">Öğrenciler</h2>
-          <button
-            onClick={() => setModalAcik(true)}
-            className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800"
-          >
+    <div className="space-y-4">
+      <div className={ui.card}>
+        <div className={ui.cardHeader}>
+          <div>
+            <p className={ui.cardTitle}>Öğrenciler</p>
+            <p className="text-xs text-gray-400 mt-0.5">{ogrenciler.length} kayıtlı öğrenci</p>
+          </div>
+          <button onClick={() => setModalAcik(true)} className={ui.btnPrimary(tema)}>
             + Öğrenci Ekle
           </button>
         </div>
 
         {ogrenciler.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">
-            Henüz öğrenci eklenmemiş
-          </div>
+          <div className={ui.cardEmpty}>Henüz öğrenci eklenmemiş</div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50 text-left">
-              <tr>
-                <th className="px-4 py-3 text-xs text-gray-500">#</th>
-                <th className="px-4 py-3 text-xs text-gray-500">Ad Soyad</th>
-                <th className="px-4 py-3 text-xs text-gray-500">Email</th>
-                <th className="px-4 py-3 text-xs text-gray-500">Telefon</th>
-                <th className="px-4 py-3 text-xs text-gray-500">Sınıf</th>
-                <th className="px-4 py-3 text-xs text-gray-500">Ortalama</th>
-                <th className="px-4 py-3 text-xs text-gray-500">Durum</th>
-                <th className="px-4 py-3 text-xs text-gray-500">İşlem</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {ogrenciler.map((o) => (
-                <tr key={o.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm text-gray-500">#{o.numara}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                    {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
-                    {o.ders_sorumlulari?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {o.ders_sorumlulari.map((ds: any) => (
-                          <span key={ds.ders_id} className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                            {ds.dersler?.ad}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </td> 
-                  <td className="px-4 py-3 text-sm text-gray-500">{o.kullanicilar?.email}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{o.kullanicilar?.telefon || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{o.siniflar?.ad || '-'}</td>
-                <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                  {ortalamalar[o.id] !== null && ortalamalar[o.id] !== undefined
-                    ? ortalamalar[o.id]!.toFixed(1)
-                    : '-'}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    o.aktif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {o.aktif ? 'Aktif' : 'Pasif'}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => { setSecilenOgrenci(o); setSorumlulukModalAcik(true) }}
-                      className="text-blue-500 text-xs hover:text-blue-700"
-                    >
-                      Sorumluluk
-                    </button>
-                    <button
-                      onClick={() => sifreSifirla(o.kullanici_id, `${o.kullanicilar?.ad} ${o.kullanicilar?.soyad}`)}
-                      className="text-amber-500 text-xs hover:text-amber-700"
-                    >
-                      Şifre
-                    </button>
-                    <button
-                      onClick={() => ogrenciSil(o)}
-                      className="text-red-500 text-xs hover:text-red-700"
-                    >
-                      Sil
-                    </button>
-                  </div>
-                </td>
-
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      o.aktif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {o.aktif ? 'Aktif' : 'Pasif'}
-                    </span>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className={ui.tableHead}>
+                  <th className={`${ui.tableHeadCell} px-6 py-3`}>#</th>
+                  <th className={`${ui.tableHeadCell} px-6 py-3`}>Ad Soyad</th>
+                  <th className={`${ui.tableHeadCell} px-6 py-3 hidden md:table-cell`}>Email</th>
+                  <th className={`${ui.tableHeadCell} px-6 py-3 hidden md:table-cell`}>Sınıf</th>
+                  <th className={`${ui.tableHeadCell} px-6 py-3`}>Ort.</th>
+                  <th className={`${ui.tableHeadCell} px-6 py-3`}></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {ogrenciler.map((o) => (
+                  <tr key={o.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-4 text-xs text-gray-400 font-mono">#{o.numara}</td>
+                    <td className="px-6 py-4">
+                      <p className="text-sm font-medium text-gray-900">{o.kullanicilar?.ad} {o.kullanicilar?.soyad}</p>
+                      {o.ders_sorumlulari?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {o.ders_sorumlulari.map((ds: any) => (
+                            <span key={ds.ders_id} className={ui.badgePurple}>{ds.dersler?.ad}</span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 hidden md:table-cell">
+                      <p className="text-sm text-gray-400">{o.kullanicilar?.email}</p>
+                    </td>
+                    <td className="px-6 py-4 hidden md:table-cell">
+                      <span className={ui.badgeGray}>{o.siniflar?.ad || '-'}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={ortalamaRenk(ortalamalar[o.id])}>
+                        {ortalamalar[o.id] !== null && ortalamalar[o.id] !== undefined
+                          ? ortalamalar[o.id]!.toFixed(1) : '—'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3 justify-end">
+                        <button onClick={() => { setSecilenOgrenci(o); setSorumlulukModalAcik(true) }} className={ui.btnGhost}>Sorumluluk</button>
+                        <button onClick={() => sifreSifirla(o.kullanici_id, `${o.kullanicilar?.ad}`)} className={ui.btnGhost}>Şifre</button>
+                        <button onClick={() => ogrenciSil(o)} className={ui.btnDanger}>Sil</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
+      {/* Öğrenci Ekle Modal */}
       {modalAcik && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-            <h3 className="font-semibold text-gray-800 mb-4">Yeni Öğrenci Ekle</h3>
-            {siniflar.length === 0 ? (
-              <p className="text-amber-600 text-sm">Önce bir sınıf oluşturman lazım!</p>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="block text-sm text-gray-600 mb-1">Ad</label>
-                    <input value={form.ad} onChange={(e) => setForm({...form, ad: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                      placeholder="Ad" />
+        <div className={ui.modalOverlay}>
+          <div className={ui.modalCard}>
+            <div className={ui.modalHeader}>
+              <p className={ui.modalTitle}>Yeni Öğrenci</p>
+            </div>
+            <div className={ui.modalBody}>
+              {siniflar.length === 0 ? (
+                <p className="text-sm text-amber-600">Önce bir sınıf oluşturman lazım!</p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={ui.label}>Ad</label>
+                      <input value={form.ad} onChange={(e) => setForm({...form, ad: e.target.value})} className={ui.input} placeholder="Ad" />
+                    </div>
+                    <div>
+                      <label className={ui.label}>Soyad</label>
+                      <input value={form.soyad} onChange={(e) => setForm({...form, soyad: e.target.value})} className={ui.input} placeholder="Soyad" />
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-sm text-gray-600 mb-1">Soyad</label>
-                    <input value={form.soyad} onChange={(e) => setForm({...form, soyad: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                      placeholder="Soyad" />
+                  <div>
+                    <label className={ui.label}>Email</label>
+                    <input type="email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} className={ui.input} placeholder="ornek@mail.com" />
                   </div>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Email</label>
-                  <input value={form.email} onChange={(e) => setForm({...form, email: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                    placeholder="ornek@mail.com" />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Telefon</label>
-                  <input value={form.telefon} onChange={(e) => setForm({...form, telefon: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                    placeholder="05xx xxx xx xx" />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Sınıf</label>
-                  <select value={form.sinif_id} onChange={(e) => setForm({...form, sinif_id: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
-                    <option value="">Sınıf seç...</option>
-                    {siniflar.map((s) => (
-                      <option key={s.id} value={s.id}>{s.ad}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Geçici Şifre</label>
-                  <input type="password" value={form.sifre} onChange={(e) => setForm({...form, sifre: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                    placeholder="En az 6 karakter" />
-                </div>
-              </div>
-            )}
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
-                İptal
-              </button>
+                  <div>
+                    <label className={ui.label}>Telefon</label>
+                    <input value={form.telefon} onChange={(e) => setForm({...form, telefon: e.target.value})} className={ui.input} placeholder="05xx xxx xx xx" />
+                  </div>
+                  <div>
+                    <label className={ui.label}>Sınıf</label>
+                    <select value={form.sinif_id} onChange={(e) => setForm({...form, sinif_id: e.target.value})} className={`${ui.select} w-full`}>
+                      <option value="">Sınıf seç...</option>
+                      {siniflar.map((s) => <option key={s.id} value={s.id}>{s.ad}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={ui.label}>Geçici Şifre</label>
+                    <input type="password" value={form.sifre} onChange={(e) => setForm({...form, sifre: e.target.value})} className={ui.input} placeholder="En az 6 karakter" />
+                  </div>
+                </>
+              )}
+            </div>
+            <div className={ui.modalFooter}>
+              <button onClick={() => setModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>İptal</button>
               {siniflar.length > 0 && (
-                <button onClick={ogrenciEkle} disabled={kaydediyor}
-                  className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50">
+                <button onClick={ogrenciEkle} disabled={kaydediyor} className={`${ui.btnPrimary(tema)} flex-1 justify-center disabled:opacity-50`}>
                   {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
                 </button>
               )}
@@ -684,42 +541,26 @@ async function ogrenciSil(ogrenci: any) {
         </div>
       )}
 
+      {/* Sorumluluk Modal */}
       {sorumlulukModalAcik && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-            <h3 className="font-semibold text-gray-800 mb-1">Ders Sorumluluğu Ata</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              {secilenOgrenci?.kullanicilar?.ad} {secilenOgrenci?.kullanicilar?.soyad}
-            </p>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Ders Seç</label>
-              <select
-                value={secilenSorumlulukDers}
-                onChange={(e) => setSecilenSorumlulukDers(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-              >
-                <option value="">Ders seç...</option>
-                {tumDersler.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.ad} — {d.siniflar?.ad}
-                  </option>
-                ))}
-              </select>
+        <div className={ui.modalOverlay}>
+          <div className={ui.modalCard}>
+            <div className={ui.modalHeader}>
+              <p className={ui.modalTitle}>Sorumluluk Ata</p>
+              <p className="text-xs text-gray-400 mt-0.5">{secilenOgrenci?.kullanicilar?.ad} {secilenOgrenci?.kullanicilar?.soyad}</p>
             </div>
-            <div className="flex gap-2 mt-4">
-              <button
-                onClick={() => setSorumlulukModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50"
-              >
-                İptal
-              </button>
-              <button
-                onClick={sorumlulukAta}
-                disabled={!secilenSorumlulukDers}
-                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50"
-              >
-                Ata
-              </button>
+            <div className={ui.modalBody}>
+              <div>
+                <label className={ui.label}>Ders Seç</label>
+                <select value={secilenSorumlulukDers} onChange={(e) => setSecilenSorumlulukDers(e.target.value)} className={`${ui.select} w-full`}>
+                  <option value="">Ders seç...</option>
+                  {tumDersler.map((d) => <option key={d.id} value={d.id}>{d.ad} — {d.siniflar?.ad}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className={ui.modalFooter}>
+              <button onClick={() => setSorumlulukModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>İptal</button>
+              <button onClick={sorumlulukAta} disabled={!secilenSorumlulukDers} className={`${ui.btnPrimary(tema)} flex-1 justify-center disabled:opacity-50`}>Ata</button>
             </div>
           </div>
         </div>

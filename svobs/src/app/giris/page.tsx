@@ -43,50 +43,80 @@ export default function GirisPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white p-8 rounded-xl shadow-md w-full max-w-md">
-        <h1 className="text-2xl font-bold text-gray-800 mb-1">Siyer Vakfı</h1>
-        <p className="text-gray-500 mb-6">Öğrenci Bilgi Sistemi</p>
+    <main className="min-h-screen bg-stone-50 flex flex-col items-center justify-center px-4 py-12">
+      <div className="w-full max-w-sm">
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600"
-              placeholder="ornek@mail.com"
-            />
+        {/* Logo ve Başlık */}
+        <div className="flex flex-col items-center gap-4 mb-8 text-center">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-[#2f6b4f] flex items-center justify-center shadow-sm">
+              <span className="text-white font-bold text-lg">SV</span>
+            </div>
+            <p className="font-semibold text-gray-800 text-xl tracking-tight">Siyer Vakfı</p>
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Şifre
-            </label>
-            <input
-              type="password"
-              value={sifre}
-              onChange={(e) => setSifre(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600"
-              placeholder="••••••••"
-            />
+            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+              Öğrenci Bilgilendirme Sistemi
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Hesabınıza giriş yaparak devam ve sınav notlarınızı görüntüleyin.
+            </p>
           </div>
-
-          {hata && (
-            <p className="text-red-500 text-sm">{hata}</p>
-          )}
-
-          <button
-            onClick={girisYap}
-            disabled={yukleniyor}
-            className="w-full bg-green-700 text-white py-2 rounded-lg hover:bg-green-800 transition disabled:opacity-50"
-          >
-            {yukleniyor ? 'Giriş yapılıyor...' : 'Giriş Yap'}
-          </button>
         </div>
+
+        {/* Kart */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-gray-700" htmlFor="email">
+                E-posta
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="ornek@eposta.com"
+                className="h-9 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-1 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/20 transition-colors"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-gray-700" htmlFor="password">
+                Şifre
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={sifre}
+                onChange={(e) => setSifre(e.target.value)}
+                placeholder="••••••••"
+                onKeyDown={(e) => e.key === 'Enter' && girisYap()}
+                className="h-9 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-1 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/20 transition-colors"
+              />
+            </div>
+
+            {hata && (
+              <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{hata}</p>
+            )}
+
+            <button
+              onClick={girisYap}
+              disabled={yukleniyor}
+              className="h-9 w-full rounded-lg bg-emerald-800 text-white text-sm font-medium hover:bg-emerald-900 transition-colors disabled:opacity-50"
+            >
+              {yukleniyor ? 'Giriş yapılıyor...' : 'Giriş Yap'}
+            </button>
+
+            <button className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
+              Şifremi unuttum
+            </button>
+          </div>
+        </div>
+
+        <p className="text-xs text-gray-400 text-center mt-6">
+          Giriş bilgileriniz programınızın öğretmeni tarafından oluşturulur. Sorun yaşıyorsanız öğretmeninizle iletişime geçin.
+        </p>
       </div>
     </main>
   )
