@@ -5,6 +5,12 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { ui } from '@/lib/ui'
+import { Button } from '@/components/ui/button'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+
 
 export default function AdminPage() {
   const [kullanici, setKullanici] = useState<any>(null)
@@ -82,30 +88,30 @@ export default function AdminPage() {
   const tema = programTema(aktifProgram?.ad || '')
 
   return (
-    <div className={ui.page}>
-      <header className={`${temaAccent(tema)} border-b px-6 py-4 flex items-center justify-between`}>
+<div className="min-h-svh bg-background">
+      <header className="border-b bg-card px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className={`w-8 h-8 rounded-lg ${temaBg(tema)} flex items-center justify-center`}>
-            <span className="text-white text-xs font-bold">SV</span>
-          </div>
+          <img src="/sv-logo.png" alt="Siyer Vakfı" className="w-8 h-8 object-contain brightness-0" />
           <div>
-            <h1 className={`font-semibold text-sm ${temaPrimary(tema)}`}>Siyer Vakfı</h1>
-            <p className="text-xs text-gray-400">Yönetim Paneli</p>
+            <p className="font-semibold text-sm text-foreground">Siyer Vakfı</p>
+            <p className="text-xs text-muted-foreground">Yönetim Paneli</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <div className="text-right">
-            <p className="text-sm font-medium text-gray-700">{kullanici?.ad} {kullanici?.soyad}</p>
-            <p className="text-xs text-gray-400">{kullanici?.rol === 'super_admin' ? 'Süper Admin' : 'Program Yöneticisi'}</p>
+            <p className="text-sm font-medium text-foreground">{kullanici?.ad} {kullanici?.soyad}</p>
+            <p className="text-xs text-muted-foreground">{kullanici?.rol === 'super_admin' ? 'Süper Admin' : 'Program Yöneticisi'}</p>
           </div>
           <div className="flex gap-2">
-            <a href="/sifre-degistir" className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-white transition">Şifre</a>
-            <button onClick={cikisYap} className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-white transition">Çıkış</button>
+            <a href="/sifre-degistir">
+              <Button variant="outline" size="sm">Şifre</Button>
+            </a>
+            <Button variant="outline" size="sm" onClick={cikisYap}>Çıkış</Button>
           </div>
         </div>
       </header>
 
-      <div className="bg-white border-b border-gray-100 px-6 py-2 flex gap-2">
+      <div className="border-b bg-card px-6 py-2 flex gap-2">
         {programlar.map((p) => {
           const pTema = programTema(p.ad)
           const aktif = aktifProgram?.id === p.id
@@ -115,8 +121,8 @@ export default function AdminPage() {
               onClick={() => setAktifProgram(p)}
               className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
                 aktif
-                  ? pTema === 'esma' ? 'bg-purple-400 text-white' : 'bg-emerald-600 text-white'
-                  : 'border border-gray-200 text-gray-500 hover:bg-gray-50'
+                  ? pTema === 'esma' ? 'bg-[#a53860] text-white' : 'bg-[#344e41] text-white'
+                  : 'border border-border text-muted-foreground hover:bg-muted'
               }`}
             >
               {p.ad}
@@ -125,17 +131,17 @@ export default function AdminPage() {
         })}
       </div>
 
-      <div className="bg-white border-b border-gray-100 px-6 flex gap-1 overflow-x-auto">
+      <div className="border-b bg-card px-6 flex gap-1 overflow-x-auto">
         {sekmeler.map((s) => (
           <button
             key={s.id}
             onClick={() => setAktifSekme(s.id)}
             className={`px-4 py-3 text-sm whitespace-nowrap border-b-2 transition ${
               aktifSekme === s.id
-                  ? tema === 'esma'
-                  ? 'border-purple-400 text-purple-500 font-medium'
-                  : 'border-emerald-600 text-emerald-700 font-medium'
-                : 'border-transparent text-gray-400 hover:text-gray-600'
+                ? tema === 'esma'
+                  ? 'border-[#a53860] text-[#a53860] font-medium'
+                  : 'border-[#344e41] text-[#344e41] font-medium'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             {s.ad}
@@ -164,7 +170,7 @@ export default function AdminPage() {
         )}
         {aktifSekme === 'hocalar' && (
           <HocalarSekme programId={aktifProgram?.id} supabase={supabase} />
-        )} 
+        )}
       </main>
     </div>
   )

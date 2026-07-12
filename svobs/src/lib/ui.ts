@@ -14,11 +14,27 @@ export const ui = {
   // Tablolar
   tableHead: 'px-6 py-3 text-left bg-gray-50/80',
   tableHeadCell: 'text-xs font-medium text-gray-400 uppercase tracking-wider',
-  tableRow: 'px-6 py-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors',
-  tableCell: 'text-sm text-gray-700',
-  tableCellMuted: 'text-sm text-gray-400',
+  tableRow: 'border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted',
+  tableCell: 'p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0',
+  tableCellMuted: 'p-2 align-middle whitespace-nowrap text-gray-400 [&:has([role=checkbox])]:pr-0',
   
   // Butonlar
+  btnBase: 'inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-medium transition-all outline-none focus-visible:ring-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed',
+  btnVariants: {
+    variant: {
+      primary: 'text-white shadow-sm',
+      primaryEsma: 'bg-purple-500 hover:bg-purple-600 shadow-sm shadow-purple-200',
+      primaryDefault: 'bg-emerald-700 hover:bg-emerald-800 shadow-sm shadow-emerald-200',
+      secondary: 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50',
+      danger: 'text-xs text-red-400 hover:text-red-600',
+      ghost: 'text-xs text-gray-400 hover:text-gray-600',
+    },
+    size: {
+      sm: 'px-3 py-1.5',
+      md: 'px-4 py-2',
+      lg: 'px-5 py-2.5',
+    },
+  },
   btnPrimary: (tema: string) => `inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all active:scale-95 ${
     tema === 'esma' 
       ? 'bg-purple-500 hover:bg-purple-600 shadow-sm shadow-purple-200' 

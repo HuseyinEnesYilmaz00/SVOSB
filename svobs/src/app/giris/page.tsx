@@ -3,6 +3,10 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 export default function GirisPage() {
   const [email, setEmail] = useState('')
@@ -43,79 +47,75 @@ export default function GirisPage() {
   }
 
   return (
-    <main className="min-h-screen bg-stone-50 flex flex-col items-center justify-center px-4 py-12">
+    <main className="min-h-svh bg-background flex flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
-
-        {/* Logo ve Başlık */}
-        <div className="flex flex-col items-center gap-4 mb-8 text-center">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-[#2f6b4f] flex items-center justify-center shadow-sm">
-              <span className="text-white font-bold text-lg">SV</span>
-            </div>
-            <p className="font-semibold text-gray-800 text-xl tracking-tight">Siyer Vakfı</p>
+        <div className="flex flex-col items-center gap-2 mb-8 text-center">
+          <div className="w-32 h-32 flex items-center justify-center">
+            <img
+              src="/sv-logo.png"
+              alt="Siyer Vakfı"
+              className="w-full h-full object-contain brightness-0 transform scale-[1.1] translate-y-1"
+            />
           </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+          <div className="-translate-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               Öğrenci Bilgilendirme Sistemi
             </h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               Hesabınıza giriş yaparak devam ve sınav notlarınızı görüntüleyin.
             </p>
           </div>
         </div>
 
-        {/* Kart */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <Card className="p-6">
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-gray-700" htmlFor="email">
-                E-posta
-              </label>
-              <input
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="email">E-posta</Label>
+              <Input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="ornek@eposta.com"
-                className="h-9 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-1 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/20 transition-colors"
+                autoComplete="email"
               />
             </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-gray-700" htmlFor="password">
-                Şifre
-              </label>
-              <input
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="password">Şifre</Label>
+              <Input
                 id="password"
                 type="password"
                 value={sifre}
                 onChange={(e) => setSifre(e.target.value)}
                 placeholder="••••••••"
                 onKeyDown={(e) => e.key === 'Enter' && girisYap()}
-                className="h-9 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-1 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/20 transition-colors"
+                autoComplete="current-password"
               />
             </div>
 
             {hata && (
-              <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{hata}</p>
+              <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
+                {hata}
+              </p>
             )}
 
-            <button
+            <Button
               onClick={girisYap}
               disabled={yukleniyor}
-              className="h-9 w-full rounded-lg bg-emerald-800 text-white text-sm font-medium hover:bg-emerald-900 transition-colors disabled:opacity-50"
+              className="w-full"
             >
               {yukleniyor ? 'Giriş yapılıyor...' : 'Giriş Yap'}
-            </button>
+            </Button>
 
-            <button className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
+            <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Şifremi unuttum
             </button>
           </div>
-        </div>
+        </Card>
 
-        <p className="text-xs text-gray-400 text-center mt-6">
-          Giriş bilgileriniz programınızın öğretmeni tarafından oluşturulur. Sorun yaşıyorsanız öğretmeninizle iletişime geçin.
+        <p className="text-xs text-muted-foreground text-center mt-6">
+          Giriş bilgileriniz programınızın öğretmeni tarafından oluşturulur.
+          Sorun yaşıyorsanız öğretmeninizle iletişime geçin.
         </p>
       </div>
     </main>
