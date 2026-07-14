@@ -3,6 +3,13 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { ui } from '@/lib/ui'
+import { Button } from '@/components/ui/button'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+
 
 export default function OgretmenPage() {
   const [kullanici, setKullanici] = useState<any>(null)
@@ -12,6 +19,7 @@ export default function OgretmenPage() {
   const [yukleniyor, setYukleniyor] = useState(true)
   const router = useRouter()
   const supabase = createClient()
+
 
   useEffect(() => {
     async function yukle() {
@@ -77,30 +85,40 @@ export default function OgretmenPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div>
-          <h1 className="font-bold text-gray-800">Siyer Vakfı</h1>
-          <p className="text-xs text-gray-500">Öğretmen Paneli</p>
+    <div className="min-h-svh bg-background text-foreground transition-colors duration-200">
+      <header className="border-b bg-card px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <img src="/sv-logo.png" alt="Siyer Vakfı" className="w-15 h-15 object-contain brightness-0 dark:inverter" />
+          <div>
+            <p className="text-xs text-muted-foreground">Öğrenci Bilgi Sistemi — Öğretmen Paneli</p>
+          </div>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-600">{kullanici?.ad} {kullanici?.soyad}</span>
-          <a href="/sifre-degistir" className="text-sm text-gray-500 hover:text-gray-700">Şifre Değiştir</a>
-          <button onClick={cikisYap} className="text-sm text-gray-500 hover:text-gray-700">Çıkış</button>
+          <div className="text-right">
+            <p className="text-sm font-medium text-foreground">{kullanici?.ad} {kullanici?.soyad}</p>
+            <p className="text-xs text-muted-foreground">Öğretmen</p>
+          </div>
+
+          <div className="flex gap-2">
+            <a href="/sifre-degistir">
+              <Button variant="outline" size="sm">Şifre</Button>
+            </a>
+            <Button variant="outline" size="sm" onClick={cikisYap}>Çıkış</Button>
+          </div>
         </div>
       </header>
 
       {/* Ders Seçici */}
       {dersler.length > 1 && (
-        <div className="bg-white border-b border-gray-200 px-6 py-2 flex gap-2">
+        <div className="border-b bg-card px-6 py-2 flex gap-2">
           {dersler.map((d) => (
             <button
               key={d.ders_id}
               onClick={() => setSecilenDers(d)}
               className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
                 secilenDers?.ders_id === d.ders_id
-                  ? 'bg-green-700 text-white'
-                  : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'border border-border text-muted-foreground hover:bg-muted'
               }`}
             >
               {d.dersler?.ad} — {d.dersler?.siniflar?.ad}
@@ -113,7 +131,7 @@ export default function OgretmenPage() {
         <div className="p-8 text-center text-gray-400">Henüz size atanmış ders yok</div>
       ) : (
         <>
-          <div className="bg-white border-b border-gray-200 px-6 flex gap-1">
+          <div className="border-b bg-card px-6 flex gap-1">
             {sekmeler.map((s) => (
               <button
                 key={s.id}
@@ -121,7 +139,7 @@ export default function OgretmenPage() {
                 className={`px-4 py-3 text-sm whitespace-nowrap border-b-2 transition ${
                   aktifSekme === s.id
                     ? 'border-green-700 text-green-700 font-medium'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
                 {s.ad}
@@ -241,14 +259,14 @@ function OgretmenYoklama({ dersId, sinifId, supabase, kullanici }: any) {
   ]
 
   return (
-    <div className="bg-white rounded-xl shadow-sm">
+    <div className="bg-white rounded-xl shadow-sm max-w-6xl mx-auto mt-6">
       <div className="p-4 border-b border-gray-100 flex items-center justify-between">
         <h2 className="font-semibold text-gray-800">Yoklama</h2>
         <div className="flex items-center gap-3">
           <input type="date" value={tarih} onChange={(e) => setTarih(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
           <button onClick={kaydet} disabled={kaydediyor}
-            className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50">
+            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
             {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
           </button>
         </div>
@@ -397,26 +415,26 @@ function OgretmenNotlar({ dersId, sinifId, dersAd, supabase }: any) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-2">
+    <div className="space-y-0">
+      <div className="flex gap-3 px-12 py-4">
         {[
           { id: 'sinavlar', ad: 'Sınavlar' },
           { id: 'not_giris', ad: 'Not Girişi' },
           { id: 'gecmis', ad: 'Geçmiş Notlar' },
         ].map(s => (
           <button key={s.id} onClick={() => setSekme(s.id as any)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${sekme === s.id ? 'bg-green-700 text-white' : 'bg-white text-gray-600 border border-gray-300'}`}>
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${sekme === s.id ? 'bg-primary text-primary-foreground' : 'bg-white text-gray-600 border border-gray-300'}`}>
             {s.ad}
           </button>
         ))}
       </div>
 
       {sekme === 'sinavlar' && (
-        <div className="bg-white rounded-xl shadow-sm">
+        <div className="bg-white rounded-xl shadow-sm max-w-6xl mx-auto">
           <div className="p-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="font-semibold text-gray-800">Sınavlar</h2>
             <button onClick={() => setSinavModalAcik(true)}
-              className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800">
+              className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80">
               + Sınav Ekle
             </button>
           </div>
@@ -441,7 +459,7 @@ function OgretmenNotlar({ dersId, sinifId, dersAd, supabase }: any) {
       )}
 
       {sekme === 'not_giris' && (
-        <div className="bg-white rounded-xl shadow-sm">
+        <div className="bg-white rounded-xl shadow-sm max-w-6xl mx-auto">
           <div className="p-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-800 mb-3">Not Girişi</h2>
             <div className="flex items-center gap-3">
@@ -454,7 +472,7 @@ function OgretmenNotlar({ dersId, sinifId, dersAd, supabase }: any) {
                 </select>
               </div>
               <button onClick={notKaydet} disabled={kaydediyor || !secilenSinav}
-                className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50 mt-4">
+                className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50 mt-4">
                 {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
               </button>
             </div>
@@ -477,7 +495,7 @@ function OgretmenNotlar({ dersId, sinifId, dersAd, supabase }: any) {
       )}
 
       {sekme === 'gecmis' && (
-        <div className="space-y-3">
+        <div className="bg-white rounded-xl shadow-sm max-w-6xl mx-auto">
           {gecmisNotlar.length === 0 ? (
             <div className="bg-white rounded-xl p-8 text-center text-gray-400">Henüz not girilmemiş</div>
           ) : (
@@ -552,7 +570,7 @@ function OgretmenNotlar({ dersId, sinifId, dersAd, supabase }: any) {
                 İptal
               </button>
               <button onClick={sinavEkle} disabled={kaydediyor}
-                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50">
+                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
                 {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
               </button>
             </div>
@@ -614,11 +632,11 @@ function OgretmenDuyurular({ dersId, sinifId, supabase, kullanici }: any) {
 
   return (
     <div>
-      <div className="bg-white rounded-xl shadow-sm">
+      <div className="bg-white rounded-xl shadow-sm max-w-6xl mx-auto mt-6">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-semibold text-gray-800">Duyurular</h2>
           <button onClick={() => setModalAcik(true)}
-            className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800">
+            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80">
             + Duyuru Ekle
           </button>
         </div>
@@ -664,7 +682,7 @@ function OgretmenDuyurular({ dersId, sinifId, supabase, kullanici }: any) {
                 İptal
               </button>
               <button onClick={duyuruEkle} disabled={kaydediyor}
-                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50">
+                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
                 {kaydediyor ? 'Yayınlanıyor...' : 'Yayınla'}
               </button>
             </div>

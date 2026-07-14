@@ -77,7 +77,7 @@ export default function SifreDegistirPage() {
           <button
             onClick={sifreDegistir}
             disabled={yukleniyor}
-            className="w-full bg-green-700 text-white py-2 rounded-lg hover:bg-green-800 transition disabled:opacity-50"
+            className="w-full bg-primary text-primary-foreground py-2 rounded-lg hover:bg-primary/80 transition disabled:opacity-50"
           >
             {yukleniyor ? 'Değiştiriliyor...' : 'Şifreyi Değiştir'}
           </button>

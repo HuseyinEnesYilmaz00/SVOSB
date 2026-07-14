@@ -228,7 +228,7 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
           <h2 className="font-semibold text-gray-800">Sınıflar</h2>
           <button
             onClick={() => setModalAcik(true)}
-            className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800"
+            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80"
           >
             + Sınıf Ekle
           </button>
@@ -301,7 +301,7 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
               <button
                 onClick={sinifEkle}
                 disabled={kaydediyor}
-                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50"
+                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50"
               >
                 {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
               </button>
@@ -734,7 +734,7 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
               </h2>
               <button
                 onClick={() => setModalAcik(true)}
-                className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800"
+                className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80"
               >
                 + Ders Ekle
               </button>
@@ -855,7 +855,7 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
                 İptal
               </button>
               <button onClick={dersEkle} disabled={kaydediyor}
-                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50"
+                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50"
                 >
                 {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
               </button>
@@ -1042,7 +1042,7 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
           <h2 className="font-semibold text-gray-800">Hocalar</h2>
           <button
             onClick={() => setModalAcik(true)}
-            className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800"
+            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80"
           >
             + Hoca Ekle
           </button>
@@ -1140,7 +1140,7 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
                 İptal
               </button>
               <button onClick={hocaEkle} disabled={kaydediyor}
-                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50">
+                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
                 {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
               </button>
             </div>
@@ -1172,7 +1172,7 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
                 İptal
               </button>
               <button onClick={dersAta} disabled={kaydediyor || !secilenDers}
-                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50">
+                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
                 {kaydediyor ? 'Atanıyor...' : 'Ata'}
               </button>
             </div>
@@ -1353,7 +1353,7 @@ function YoklamaSekmesi({ programId, supabase, kullanici }: { programId: string,
           <button
             onClick={kaydet}
             disabled={kaydediyor || ogrenciler.length === 0}
-            className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50"
+            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50"
           >
             {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
           </button>
@@ -1562,7 +1562,7 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
           { id: 'gecmis', ad: 'Geçmiş Notlar' },
         ].map(s => (
           <button key={s.id} onClick={() => setSekme(s.id as any)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${sekme === s.id ? 'bg-green-700 text-white' : 'bg-white text-gray-600 border border-gray-300'}`}>
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${sekme === s.id ? 'bg-primary text-primary-foreground' : 'bg-white text-gray-600 border border-gray-300'}`}>
             {s.ad}
           </button>
         ))}
@@ -1574,7 +1574,7 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
           <div className="p-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="font-semibold text-gray-800">Sınavlar</h2>
             <button onClick={() => setSinavModalAcik(true)}
-              className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800">
+              className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80">
               + Sınav Ekle
             </button>
           </div>
@@ -1613,7 +1613,7 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
                 </select>
               </div>
               <button onClick={notKaydet} disabled={kaydediyor || !secilenSinav}
-                className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50 mt-4">
+                className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50 mt-4">
                 {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
               </button>
             </div>
@@ -1719,7 +1719,7 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
                 İptal
               </button>
               <button onClick={sinavEkle} disabled={kaydediyor}
-                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50">
+                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
                 {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
               </button>
             </div>
@@ -1784,7 +1784,7 @@ function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: strin
           <h2 className="font-semibold text-gray-800">Duyurular</h2>
           <button
             onClick={() => setModalAcik(true)}
-            className="bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-800"
+            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80"
           >
             + Duyuru Ekle
           </button>
@@ -1852,7 +1852,7 @@ function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: strin
               <button
                 onClick={duyuruEkle}
                 disabled={kaydediyor}
-                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm hover:bg-green-800 disabled:opacity-50"
+                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50"
               >
                 {kaydediyor ? 'Yayınlanıyor...' : 'Yayınla'}
               </button>
