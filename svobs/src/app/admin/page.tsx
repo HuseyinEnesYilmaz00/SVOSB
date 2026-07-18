@@ -86,6 +86,7 @@ export default function AdminPage() {
     { id: 'notlar', ad: 'Notlar' },
     { id: 'duyurular', ad: 'Duyurular' },
     { id: 'hocalar', ad: 'Hocalar' },
+    { id: 'genelbakis', ad: 'Genel Bakış' },
   ]
 
   const tema = programTema(aktifProgram?.ad || '')
@@ -106,7 +107,7 @@ export default function AdminPage() {
             <p className="text-xs text-muted-foreground">{kullanici?.rol === 'super_admin' ? 'Süper Admin' : 'Program Yöneticisi'}</p>
           </div>
           <div className="flex gap-2">
-          <ExportButton izinliProgramIdler={programlar.map(p => p.id)} />
+          <ExportButton izinliProgramIdler={aktifProgram ? [aktifProgram.id] : []} />
           <a href="/sifre-degistir">
           <Button variant="outline" size="sm">Şifre</Button>
           </a>
@@ -174,6 +175,9 @@ export default function AdminPage() {
         )}
         {aktifSekme === 'hocalar' && (
           <HocalarSekme programId={aktifProgram?.id} supabase={supabase} />
+        )}
+        {aktifSekme === 'genelbakis' && (
+          <GenelBakisSekmesi programId={aktifProgram?.id} supabase={supabase} tema={tema} />
         )}
       </main>
     </div>
@@ -251,7 +255,8 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
           <div className="p-8 text-center text-gray-400">
             Henüz sınıf eklenmemiş
           </div>
-        ) : (
+          ) : (
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 text-left">
               <tr>
@@ -277,6 +282,7 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -335,6 +341,9 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
   const [modalAcik, setModalAcik] = useState(false)
   const [kaydediyor, setKaydediyor] = useState(false)
   const [sorumlulukModalAcik, setSorumlulukModalAcik] = useState(false)
+  const [sifreModalAcik, setSifreModalAcik] = useState(false)
+  const [sifreHedefOgrenci, setSifreHedefOgrenci] = useState<any>(null)
+  const [yeniSifreDegeri, setYeniSifreDegeri] = useState('')
   const [pasifGoster, setPasifGoster] = useState(false)
   const [secilenOgrenci, setSecilenOgrenci] = useState<any>(null)
   const [tumDersler, setTumDersler] = useState<any[]>([])
@@ -389,16 +398,36 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
   async function ogrenciEkle() {
     if (!form.ad || !form.email || !form.sinif_id || !form.sifre) { toast('Ad, email, sınıf ve şifre zorunlu!'); return }
     setKaydediyor(true)
-    const sonNumara = ogrenciler.length > 0 ? Math.max(...ogrenciler.map(o => o.numara)) + 1 : 1
-    const res = await fetch('/api/admin/kullanici-olustur', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: form.email, password: form.sifre, ad: form.ad, soyad: form.soyad, telefon: form.telefon, sinif_id: form.sinif_id })
-    })
-    const json = await res.json()
-    if (!res.ok || !json.user) { toast('Kullanıcı oluşturulamadı: ' + (json.error || 'Hata')); setKaydediyor(false); return }
-    await supabase.from('ogrenciler').insert({ kullanici_id: json.user.id, sinif_id: form.sinif_id, numara: sonNumara, aktif: true })
-    setForm({ ad: '', soyad: '', email: '', telefon: '', sinif_id: '', sifre: '' })
-    setModalAcik(false); setKaydediyor(false); yukle()
+    try {
+      const sonNumara = ogrenciler.length > 0 ? Math.max(...ogrenciler.map(o => o.numara)) + 1 : 1
+      const res = await fetch('/api/admin/kullanici-olustur', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email, password: form.sifre, ad: form.ad, soyad: form.soyad, telefon: form.telefon, sinif_id: form.sinif_id })
+      })
+
+      let json: any = null
+      try { json = await res.json() } catch { json = null }
+
+      if (!res.ok || !json?.user) {
+        toast.error('Kullanıcı oluşturulamadı: ' + (json?.error || `HTTP ${res.status}`))
+        return
+      }
+
+      const { error: insertHata } = await supabase.from('ogrenciler').insert({ kullanici_id: json.user.id, sinif_id: form.sinif_id, numara: sonNumara, aktif: true })
+      if (insertHata) {
+        toast.error('Öğrenci kaydı oluşturulamadı: ' + insertHata.message)
+        return
+      }
+
+      toast.success('Öğrenci başarıyla eklendi')
+      setForm({ ad: '', soyad: '', email: '', telefon: '', sinif_id: '', sifre: '' })
+      setModalAcik(false)
+      yukle()
+    } catch (err: any) {
+      alert('Beklenmeyen hata: ' + JSON.stringify(err?.message || err))
+    } finally {
+      setKaydediyor(false)
+    }
   }
 
   function ogrenciSil(ogrenci: any) {
@@ -424,11 +453,24 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
     yukle()
   }
 
-  async function sifreSifirla(kullaniciId: string, ad: string) {
-    const yeniSifre = prompt(`${ad} için yeni şifre gir (en az 6 karakter):`)
-    if (!yeniSifre || yeniSifre.length < 6) return
-    const res = await fetch('/api/admin/sifre-sifirla', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: kullaniciId, password: yeniSifre }) })
-    if (res.ok) toast('Şifre değiştirildi!')
+  function sifreSifirlaAc(kullaniciId: string, ad: string) {
+    setSifreHedefOgrenci({ kullaniciId, ad })
+    setYeniSifreDegeri('')
+    setSifreModalAcik(true)
+  }
+
+  async function sifreSifirlaKaydet() {
+    if (!yeniSifreDegeri || yeniSifreDegeri.length < 6) {
+      toast.error('Şifre en az 6 karakter olmalı!')
+      return
+    }
+    const res = await fetch('/api/admin/sifre-sifirla', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: sifreHedefOgrenci.kullaniciId, password: yeniSifreDegeri }) })
+    if (res.ok) {
+      toast.success('Şifre değiştirildi!')
+      setSifreModalAcik(false)
+    } else {
+      toast.error('Şifre değiştirilemedi')
+    }
   }
 
   async function sorumlulukAta() {
@@ -518,7 +560,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
                         {o.aktif ? (
                           <>
                             <button onClick={() => { setSecilenOgrenci(o); setSorumlulukModalAcik(true) }} className={ui.btnGhost}>Sorumluluk</button>
-                            <button onClick={() => sifreSifirla(o.kullanici_id, `${o.kullanicilar?.ad}`)} className={ui.btnGhost}>Şifre</button>
+                            <button onClick={() => sifreSifirlaAc(o.kullanici_id, `${o.kullanicilar?.ad}`)} className={ui.btnGhost}>Şifre</button>
                             <button onClick={() => ogrenciSil(o)} className={ui.btnDanger}>Pasife Al</button>
                           </>
                         ) : (
@@ -605,12 +647,44 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
               </div>
             </div>
             <div className={ui.modalFooter}>
+              <div className={ui.modalFooter}>
               <button onClick={() => setSorumlulukModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>İptal</button>
-              <button onClick={sorumlulukAta} disabled={!secilenSorumlulukDers} className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80">Ata</button>
+              <button onClick={sorumlulukAta} disabled={!secilenSorumlulukDers} className="flex-1 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-medium hover:bg-primary/80 transition-all active:scale-95 disabled:opacity-50">Ata</button>
+            </div>
             </div>
           </div>
         </div>
       )}
+      {/* Şifre Değiştir Modal */}
+      {sifreModalAcik && (
+        <div className={ui.modalOverlay}>
+          <div className={ui.modalCard}>
+            <div className={ui.modalHeader}>
+              <p className={ui.modalTitle}>Şifre Değiştir</p>
+              <p className="text-xs text-gray-400 mt-0.5">{sifreHedefOgrenci?.ad}</p>
+            </div>
+            <div className={ui.modalBody}>
+              <div>
+                <label className={ui.label}>Yeni Şifre</label>
+                <input
+                  type="password"
+                  value={yeniSifreDegeri}
+                  onChange={(e) => setYeniSifreDegeri(e.target.value)}
+                  className={`${ui.select} w-full`}
+                  placeholder="En az 6 karakter"
+                />
+              </div>
+            </div>
+            <div className={ui.modalFooter}>
+              <div className={ui.modalFooter}>
+              <button onClick={() => setSifreModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>İptal</button>
+              <button onClick={sifreSifirlaKaydet} className="flex-1 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-medium hover:bg-primary/80 transition-all active:scale-95">Kaydet</button>
+            </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
@@ -794,6 +868,7 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
                 Bu sınıfa henüz ders eklenmemiş
               </div>
             ) : (
+              <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 text-left">
                   <tr>
@@ -846,6 +921,7 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </>
@@ -996,22 +1072,31 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
 
   async function yukle() {
     if (!programId) return
-    const { data: h } = await supabase
+    const { data: tumOgretmenler } = await supabase
       .from('kullanicilar')
       .select(`
         *,
-        ogretmen_dersleri!inner (
+        ogretmen_dersleri (
           ders_id,
-          dersler!inner (ad, siniflar!inner (ad, program_id))
+          dersler (ad, siniflar (ad, program_id))
         )
       `)
       .eq('rol', 'ogretmen')
-      .eq('ogretmen_dersleri.dersler.siniflar.program_id', programId)
+
+    const h = (tumOgretmenler ?? [])
+      .map((hoca: any) => {
+        const tumDersleri = hoca.ogretmen_dersleri ?? []
+        const buProgramDersleri = tumDersleri.filter((od: any) => od.dersler?.siniflar?.program_id === programId)
+        return { ...hoca, ogretmen_dersleri: buProgramDersleri, _tumDersSayisi: tumDersleri.length }
+      })
+      // hiç dersi olmayan (yeni eklenmiş, henüz atama yapılmamış) hocaları da göster
+      .filter((hoca: any) => hoca._tumDersSayisi === 0 || hoca.ogretmen_dersleri.length > 0)
+
     const { data: d } = await supabase
       .from('dersler')
       .select('*, siniflar!inner (ad, program_id)')
       .eq('siniflar.program_id', programId)
-    setHocalar(h || [])
+    setHocalar(h)
     setDersler(d || [])
     setYukleniyor(false)
   }
@@ -1040,11 +1125,12 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
 
     const json = await res.json()
     if (!res.ok || !json.user) {
-      toast('Hoca eklenemedi: ' + (json.error || 'Hata'))
+      toast.error('Hoca eklenemedi: ' + (json.error || 'Hata'))
       setKaydediyor(false)
       return
     }
 
+    toast.success('Hoca başarıyla eklendi')
     setForm({ ad: '', soyad: '', email: '', telefon: '', sifre: '' })
     setModalAcik(false)
     setKaydediyor(false)
@@ -1110,7 +1196,7 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
           <div className="divide-y divide-gray-100">
             {hocalar.map((h) => (
               <div key={h.id} className="p-4">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
                   <div>
                     <p className="font-medium text-gray-800">{h.ad} {h.soyad}</p>
                     <p className="text-sm text-gray-500">{h.email}</p>
@@ -1420,7 +1506,7 @@ function YoklamaSekmesi({ programId, supabase, kullanici }: { programId: string,
         ) : (
           <div className="divide-y divide-gray-100">
             {ogrenciler.map((o) => (
-              <div key={o.id} className="px-4 py-3 flex items-center justify-between">
+              <div key={o.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
                   <span className="text-sm font-medium text-gray-800">
                     #{o.numara} {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
@@ -1429,7 +1515,7 @@ function YoklamaSekmesi({ programId, supabase, kullanici }: { programId: string,
                     <span className="ml-2 text-xs text-gray-400">kaydedildi</span>
                   )}
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 flex-wrap">
                   {durumlar.map((d) => (
                     <button
                       key={d.value}
@@ -1854,7 +1940,7 @@ function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: strin
       return
     }
     setKaydediyor(true)
-    await supabase.from('duyurular').insert({
+    const { error: duyuruHata } = await supabase.from('duyurular').insert({
       program_id: programId,
       baslik: form.baslik.trim(),
       icerik: form.icerik.trim(),
@@ -1863,6 +1949,14 @@ function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: strin
       hedef_sinif_id: form.hedefTipi === 'sinif' ? form.hedefSinifId : null,
       hedef_kullanici_id: form.hedefTipi === 'ogrenci' ? form.hedefKullaniciId : null,
     })
+
+    if (duyuruHata) {
+      toast.error('Duyuru kaydedilemedi: ' + duyuruHata.message)
+      setKaydediyor(false)
+      return
+    }
+
+    toast.success('Duyuru yayınlandı')
 
     // Mail gönder
     fetch('/api/duyuru-mail-gonder', {
@@ -2025,6 +2119,292 @@ function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: strin
             </div>
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+// ===== GENEL BAKIŞ =====
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+
+function GenelBakisSekmesi({ programId, supabase, tema }: { programId: string, supabase: any, tema: string }) {
+  const [siniflar, setSiniflar] = useState<any[]>([])
+  const [dersler, setDersler] = useState<any[]>([])
+  const [ogrenciler, setOgrenciler] = useState<any[]>([])
+  const [yoklamalar, setYoklamalar] = useState<any[]>([])
+  const [yukleniyor, setYukleniyor] = useState(true)
+
+  const [gruplama, setGruplama] = useState<'sinif' | 'ogrenci' | 'ders'>('sinif')
+  const [gorunum, setGorunum] = useState<'ozet' | 'detay'>('ozet')
+  const [secilenOgrenciId, setSecilenOgrenciId] = useState('')
+  const [secilenDersId, setSecilenDersId] = useState('')
+  const [detayDersId, setDetayDersId] = useState('')
+
+  useEffect(() => {
+    async function yukle() {
+      if (!programId) return
+      setYukleniyor(true)
+
+      const { data: s } = await supabase.from('siniflar').select('id, ad').eq('program_id', programId)
+      setSiniflar(s || [])
+      const sinifIdleri = (s || []).map((x: any) => x.id)
+      if (sinifIdleri.length === 0) { setDersler([]); setOgrenciler([]); setYoklamalar([]); setYukleniyor(false); return }
+
+      const { data: d } = await supabase.from('dersler').select('id, ad, sinif_id').in('sinif_id', sinifIdleri)
+      setDersler(d || [])
+
+      const { data: o } = await supabase
+        .from('ogrenciler')
+        .select('id, sinif_id, kullanicilar (ad, soyad)')
+        .in('sinif_id', sinifIdleri)
+        .eq('aktif', true)
+      setOgrenciler(o || [])
+
+      const dersIdleri = (d || []).map((x: any) => x.id)
+      if (dersIdleri.length === 0) { setYoklamalar([]); setYukleniyor(false); return }
+
+      const { data: y } = await supabase
+        .from('yoklamalar')
+        .select('ogrenci_id, durum, ders_id, tarih')
+        .in('ders_id', dersIdleri)
+        .order('tarih')
+      setYoklamalar(y || [])
+      setYukleniyor(false)
+    }
+    yukle()
+    setGruplama('sinif'); setGorunum('ozet'); setSecilenOgrenciId(''); setSecilenDersId('')
+  }, [programId])
+
+  const detayRenkleri = { Katıldı: '#16a34a', Katılmadı: '#dc2626', Geç: '#ca8a04', İzinli: '#2563eb' }
+  const cokluRenkler = ['#344e41', '#a53860', '#2563eb', '#ca8a04', '#7c3aed', '#0891b2', '#db2777', '#059669']
+  const barRenk = tema === 'esma' ? '#a53860' : '#344e41'
+  const tarihFormat = (t: any) => new Date(t).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' })
+
+  function durumOranlariHesapla(kayitlar: any[], tarihler: string[]) {
+    return tarihler.map((tarih) => {
+      const buGun = kayitlar.filter((y: any) => y.tarih === tarih)
+      const toplam = buGun.length
+      const oran = (durum: string) => toplam > 0 ? Math.round((buGun.filter((y: any) => y.durum === durum).length / toplam) * 100) : 0
+      return { tarih, Katıldı: oran('katildi'), Katılmadı: oran('katilmadi'), Geç: oran('gec'), İzinli: oran('izinli') }
+    })
+  }
+
+  // ---- SINIF BAZLI ----
+  const yoklamaSinifli = yoklamalar.map((y: any) => {
+    const ders = dersler.find((d: any) => d.id === y.ders_id)
+    const sinif = siniflar.find((s: any) => s.id === ders?.sinif_id)
+    return { ...y, sinifAd: sinif?.ad || 'Bilinmiyor' }
+  })
+  const sinifTarihleri = [...new Set(yoklamaSinifli.map((y: any) => y.tarih))].sort()
+
+  const sinifOzetVeri = sinifTarihleri.map((tarih) => {
+    const gun: any = { tarih }
+    siniflar.forEach((sinif: any) => {
+      const buGun = yoklamaSinifli.filter((y: any) => y.tarih === tarih && y.sinifAd === sinif.ad)
+      const toplam = buGun.length
+      const katilan = buGun.filter((y: any) => y.durum === 'katildi' || y.durum === 'gec').length
+      if (toplam > 0) gun[sinif.ad] = Math.round((katilan / toplam) * 100)
+    })
+    return gun
+  })
+  const sinifDetayVeri = durumOranlariHesapla(yoklamaSinifli, sinifTarihleri)
+
+  // ---- ÖĞRENCİ BAZLI: PDF formatı — ders x durum sayıları ----
+  const secilenOgrenci = ogrenciler.find((o: any) => o.id === secilenOgrenciId)
+  const ogrenciDersleri = secilenOgrenci ? dersler.filter((d: any) => d.sinif_id === secilenOgrenci.sinif_id) : []
+  const ogrenciKayitlari = yoklamalar.filter((y: any) => y.ogrenci_id === secilenOgrenciId)
+
+  const ogrenciDersVeri = ogrenciDersleri.map((d: any) => {
+    const buDers = ogrenciKayitlari.filter((y: any) => y.ders_id === d.id)
+    return {
+      ad: d.ad,
+      Devam: buDers.filter((y: any) => y.durum === 'katildi').length,
+      'Geç Katıldı': buDers.filter((y: any) => y.durum === 'gec').length,
+      Mazeret: buDers.filter((y: any) => y.durum === 'izinli').length,
+      Katılmadı: buDers.filter((y: any) => y.durum === 'katilmadi').length,
+    }
+  })
+
+  const ogrenciToplam = ogrenciKayitlari.length
+  const ogrenciOzetYuzde = (durum: string) => ogrenciToplam > 0 ? Math.round((ogrenciKayitlari.filter((y: any) => y.durum === durum).length / ogrenciToplam) * 1000) / 10 : 0
+
+  // ---- DERS BAZLI ----
+  const dersKayitlari = yoklamalar.filter((y: any) => y.ders_id === secilenDersId)
+  const dersTarihleri = [...new Set(dersKayitlari.map((y: any) => y.tarih))].sort()
+  const dersOzetVeri = dersTarihleri.map((tarih) => {
+    const buGun = dersKayitlari.filter((y: any) => y.tarih === tarih)
+    const toplam = buGun.length
+    const katilan = buGun.filter((y: any) => y.durum === 'katildi' || y.durum === 'gec').length
+    return { tarih, oran: toplam > 0 ? Math.round((katilan / toplam) * 100) : 0 }
+  })
+  const dersOgrenciIdleri = [...new Set(dersKayitlari.map((y: any) => y.ogrenci_id))]
+  const dersOgrenciListesi = ogrenciler.filter((o: any) => dersOgrenciIdleri.includes(o.id))
+  const dersOgrenciVeri = dersTarihleri.map((tarih) => {
+    const gun: any = { tarih }
+    dersOgrenciListesi.forEach((o: any) => {
+      const kayit = dersKayitlari.find((y: any) => y.tarih === tarih && y.ogrenci_id === o.id)
+      if (kayit) {
+        const puanlar: Record<string, number> = { katildi: 100, gec: 75, izinli: 50, katilmadi: 0 }
+        gun[`${o.kullanicilar?.ad} ${o.kullanicilar?.soyad}`] = puanlar[kayit.durum]
+      }
+    })
+    return gun
+  })
+
+  if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h2 className="font-semibold text-gray-800">Devam Trendi</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            {[{ id: 'sinif', ad: 'Sınıf' }, { id: 'ogrenci', ad: 'Öğrenci' }, { id: 'ders', ad: 'Ders' }].map((g) => (
+              <button key={g.id} onClick={() => { setGruplama(g.id as any); setGorunum('ozet') }}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition ${gruplama === g.id ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}>
+                {g.ad}
+              </button>
+            ))}
+          </div>
+          {gruplama !== 'ogrenci' && (
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              <button onClick={() => setGorunum('ozet')}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition ${gorunum === 'ozet' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}>
+                Özet
+              </button>
+              <button onClick={() => setGorunum('detay')}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition ${gorunum === 'detay' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`}>
+                Detaylı
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {gruplama === 'ogrenci' && (
+        <select value={secilenOgrenciId} onChange={(e) => { setSecilenOgrenciId(e.target.value); setDetayDersId('') }}
+          className="mb-4 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+          <option value="">Öğrenci seç...</option>
+          {ogrenciler.map((o: any) => <option key={o.id} value={o.id}>{o.kullanicilar?.ad} {o.kullanicilar?.soyad}</option>)}
+        </select>
+      )}
+
+      {gruplama === 'ders' && (
+        <select value={secilenDersId} onChange={(e) => setSecilenDersId(e.target.value)}
+          className="mb-4 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+          <option value="">Ders seç...</option>
+          {dersler.map((d: any) => {
+            const sinif = siniflar.find((s: any) => s.id === d.sinif_id)
+            return <option key={d.id} value={d.id}>{d.ad} — {sinif?.ad}</option>
+          })}
+        </select>
+      )}
+
+      {/* SINIF */}
+      {gruplama === 'sinif' && (
+        sinifTarihleri.length === 0 ? <div className="p-8 text-center text-gray-400">Henüz veri yok</div> : (
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart data={gorunum === 'ozet' ? sinifOzetVeri : sinifDetayVeri}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="tarih" tickFormatter={tarihFormat} fontSize={12} />
+              <YAxis domain={[0, 100]} fontSize={12} />
+              <Tooltip labelFormatter={tarihFormat} formatter={(v: any) => `%${v}`} />
+              <Legend />
+              {gorunum === 'ozet'
+                ? siniflar.map((sinif: any, i: number) => (
+                    <Line key={sinif.id} type="monotone" dataKey={sinif.ad} stroke={cokluRenkler[i % cokluRenkler.length]} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                  ))
+                : Object.entries(detayRenkleri).map(([key, renk]) => (
+                    <Line key={key} type="monotone" dataKey={key} stroke={renk} strokeWidth={2} dot={{ r: 3 }} />
+                  ))
+              }
+            </LineChart>
+          </ResponsiveContainer>
+        )
+      )}
+
+      {/* ÖĞRENCİ — PDF formatı: ders x durum bar chart */}
+      {gruplama === 'ogrenci' && (
+        !secilenOgrenciId ? <div className="p-8 text-center text-gray-400">Bir öğrenci seç</div> :
+        ogrenciDersVeri.length === 0 ? <div className="p-8 text-center text-gray-400">Bu öğrenci için veri yok</div> : (
+          <>
+            <p className="text-xs text-gray-500 mb-3">
+              Toplam Ders Sayısı: {ogrenciToplam} — %{ogrenciOzetYuzde('katildi')} Devam, %{ogrenciOzetYuzde('gec')} Geç Katıldı, %{ogrenciOzetYuzde('izinli')} Mazeret, %{ogrenciOzetYuzde('katilmadi')} Katılmadı
+            </p>
+            <p className="text-xs text-gray-400 mb-2">Detay için bir derse tıkla</p>
+            <ResponsiveContainer width="100%" height={340}>
+              <BarChart data={ogrenciDersVeri}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="ad" fontSize={12} />
+                <YAxis fontSize={12} allowDecimals={false} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="Devam" fill="#16a34a" radius={[3, 3, 0, 0]} cursor="pointer"
+                  onClick={(data: any) => setDetayDersId(ogrenciDersleri.find((d: any) => d.ad === data.ad)?.id || '')} />
+                <Bar dataKey="Geç Katıldı" fill="#ca8a04" radius={[3, 3, 0, 0]} cursor="pointer"
+                  onClick={(data: any) => setDetayDersId(ogrenciDersleri.find((d: any) => d.ad === data.ad)?.id || '')} />
+                <Bar dataKey="Mazeret" fill="#2563eb" radius={[3, 3, 0, 0]} cursor="pointer"
+                  onClick={(data: any) => setDetayDersId(ogrenciDersleri.find((d: any) => d.ad === data.ad)?.id || '')} />
+                <Bar dataKey="Katılmadı" fill="#dc2626" radius={[3, 3, 0, 0]} cursor="pointer"
+                  onClick={(data: any) => setDetayDersId(ogrenciDersleri.find((d: any) => d.ad === data.ad)?.id || '')} />
+              </BarChart>
+            </ResponsiveContainer>
+
+            {detayDersId && (() => {
+              const dersAdi = ogrenciDersleri.find((d: any) => d.id === detayDersId)?.ad
+              const kayitlar = ogrenciKayitlari
+                .filter((y: any) => y.ders_id === detayDersId)
+                .sort((a: any, b: any) => a.tarih.localeCompare(b.tarih))
+              const durumEtiket: Record<string, { ad: string, renk: string }> = {
+                katildi: { ad: 'Devam', renk: 'text-green-600' },
+                gec: { ad: 'Geç Katıldı', renk: 'text-amber-600' },
+                izinli: { ad: 'Mazeret', renk: 'text-blue-600' },
+                katilmadi: { ad: 'Katılmadı', renk: 'text-red-600' },
+              }
+              return (
+                <div className="mt-4 border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="px-4 py-2 bg-gray-50 flex items-center justify-between">
+                    <p className="text-sm font-medium text-gray-700">{dersAdi} — Tarih Detayı</p>
+                    <button onClick={() => setDetayDersId('')} className="text-xs text-gray-400 hover:text-gray-600">Kapat</button>
+                  </div>
+                  {kayitlar.length === 0 ? (
+                    <p className="p-4 text-sm text-gray-400">Bu derse ait kayıt yok</p>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {kayitlar.map((k: any, i: number) => (
+                        <div key={i} className="px-4 py-2 flex items-center justify-between text-sm">
+                          <span className="text-gray-600">{new Date(k.tarih).toLocaleDateString('tr-TR')}</span>
+                          <span className={`font-medium ${durumEtiket[k.durum]?.renk}`}>{durumEtiket[k.durum]?.ad}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+          </>
+        )
+      )}
+
+      {/* DERS */}
+      {gruplama === 'ders' && (
+        !secilenDersId ? <div className="p-8 text-center text-gray-400">Bir ders seç</div> :
+        dersTarihleri.length === 0 ? <div className="p-8 text-center text-gray-400">Bu ders için veri yok</div> : (
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart data={gorunum === 'ozet' ? dersOzetVeri : dersOgrenciVeri}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="tarih" tickFormatter={tarihFormat} fontSize={12} />
+              <YAxis domain={[0, 100]} fontSize={12} />
+              <Tooltip labelFormatter={tarihFormat} formatter={(v: any) => `%${v}`} />
+              <Legend />
+              {gorunum === 'ozet'
+                ? <Line type="monotone" dataKey="oran" name="Devam Oranı (%)" stroke={barRenk} strokeWidth={2} dot={{ r: 3 }} />
+                : dersOgrenciListesi.map((o: any, i: number) => (
+                    <Line key={o.id} type="monotone" dataKey={`${o.kullanicilar?.ad} ${o.kullanicilar?.soyad}`} stroke={cokluRenkler[i % cokluRenkler.length]} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                  ))
+              }
+            </LineChart>
+          </ResponsiveContainer>
+        )
       )}
     </div>
   )

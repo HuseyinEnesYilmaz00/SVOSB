@@ -40,7 +40,7 @@ export const ui = {
       ? 'bg-[#a53860] hover:bg-[#8f2f52] shadow-sm shadow-[#a53860]/20' 
       : 'bg-emerald-700 hover:bg-emerald-800 shadow-sm shadow-emerald-200'
   }`,
-  btnSecondary: 'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 transition-all active:scale-95',
+  btnSecondary: 'inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 transition-all active:scale-95',
   btnDanger: 'text-xs text-red-400 hover:text-red-600 transition-colors',
   btnGhost: 'text-xs text-gray-400 hover:text-gray-600 transition-colors',
   
@@ -58,12 +58,12 @@ export const ui = {
   badgePurple: 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-600 border border-purple-100',
   
   // Modal
-  modalOverlay: 'fixed inset-0 bg-black/30 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4',
-  modalCard: 'bg-white rounded-2xl w-full max-w-md shadow-2xl',
+  modalOverlay: 'fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-overlay',
+  modalCard: 'bg-white rounded-2xl w-full max-w-md shadow-2xl animate-modal',
   modalHeader: 'px-6 pt-6 pb-4 border-b border-gray-50',
   modalTitle: 'text-base font-semibold text-gray-900',
   modalBody: 'px-6 py-4 space-y-3',
-  modalFooter: 'px-6 pb-6 pt-4 flex gap-2',
+  modalFooter: 'px-6 pb-6 pt-4 flex flex-col sm:flex-row gap-2',
   
   // Form label
   label: 'block text-xs font-medium text-gray-500 mb-1.5',
