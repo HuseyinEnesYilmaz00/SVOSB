@@ -1,4 +1,5 @@
 'use client'
+import { toast } from 'sonner'
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
@@ -248,7 +249,7 @@ function OgretmenYoklama({ dersId, sinifId, supabase, kullanici }: any) {
       }
     }
     setKaydediyor(false)
-    alert('Yoklama kaydedildi!')
+    toast('Yoklama kaydedildi!')
   }
 
   const durumlar = [
@@ -359,7 +360,7 @@ function OgretmenNotlar({ dersId, sinifId, dersAd, supabase }: any) {
   }, [dersId])
 
   async function sinavEkle() {
-    if (!sinavForm.baslik || !sinavForm.tarih) { alert('Başlık ve tarih zorunlu!'); return }
+    if (!sinavForm.baslik || !sinavForm.tarih) { toast('Başlık ve tarih zorunlu!'); return }
     setKaydediyor(true)
 
     await supabase.from('sinavlar').insert({
@@ -389,11 +390,11 @@ function OgretmenNotlar({ dersId, sinifId, dersAd, supabase }: any) {
 
     const { data } = await supabase.from('sinavlar').select('*').eq('ders_id', dersId).order('tarih', { ascending: false })
     setSinavlar(data || [])
-    alert('Sınav eklendi ve duyuru yapıldı!')
+    toast('Sınav eklendi ve duyuru yapıldı!')
   }
 
   async function notKaydet() {
-    if (!secilenSinav) { alert('Önce bir sınav seç!'); return }
+    if (!secilenSinav) { toast('Önce bir sınav seç!'); return }
     setKaydediyor(true)
     for (const o of ogrenciler) {
       const puan = notlar[o.id]
@@ -411,7 +412,7 @@ function OgretmenNotlar({ dersId, sinifId, dersAd, supabase }: any) {
     setKaydediyor(false)
     const { data } = await supabase.from('notlar').select('*, ogrenciler (numara, kullanici_id), sinavlar (baslik, tarih)').eq('ders_id', dersId).order('olusturulma_tarihi', { ascending: false })
     setGecmisNotlar(data || [])
-    alert('Notlar kaydedildi!')
+    toast('Notlar kaydedildi!')
   }
 
   return (
@@ -611,7 +612,7 @@ function OgretmenDuyurular({ dersId, sinifId, supabase, kullanici }: any) {
   }, [sinifId])
 
   async function duyuruEkle() {
-    if (!form.baslik.trim() || !form.icerik.trim()) { alert('Başlık ve içerik zorunlu!'); return }
+    if (!form.baslik.trim() || !form.icerik.trim()) { toast('Başlık ve içerik zorunlu!'); return }
     setKaydediyor(true)
     await supabase.from('duyurular').insert({
       program_id: sinifProgramId,

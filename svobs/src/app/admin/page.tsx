@@ -1,4 +1,5 @@
 'use client'
+import { toast } from 'sonner'
 
 import { programTema, temaBg, temaAccent, temaHover, temaPrimary } from '@/lib/tema'
 import { useEffect, useState } from 'react'
@@ -216,10 +217,19 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
     yukle()
   }
 
-  async function sinifSil(id: string) {
-    if (!confirm('Bu sınıfı silmek istediğine emin misin?')) return
-    await supabase.from('siniflar').delete().eq('id', id)
-    yukle()
+  function sinifSil(id: string) {
+    toast('Bu sınıf silinecek', {
+      description: 'Bu işlem geri alınamaz.',
+      action: {
+        label: 'Sil',
+        onClick: async () => {
+          await supabase.from('siniflar').delete().eq('id', id)
+          toast.success('Sınıf silindi')
+          yukle()
+        },
+      },
+      cancel: { label: 'Vazgeç', onClick: () => {} },
+    })
   }
 
   if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
@@ -325,6 +335,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
   const [modalAcik, setModalAcik] = useState(false)
   const [kaydediyor, setKaydediyor] = useState(false)
   const [sorumlulukModalAcik, setSorumlulukModalAcik] = useState(false)
+  const [pasifGoster, setPasifGoster] = useState(false)
   const [secilenOgrenci, setSecilenOgrenci] = useState<any>(null)
   const [tumDersler, setTumDersler] = useState<any[]>([])
   const [secilenSorumlulukDers, setSecilenSorumlulukDers] = useState('')
@@ -376,7 +387,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
   useEffect(() => { yukle() }, [programId])
 
   async function ogrenciEkle() {
-    if (!form.ad || !form.email || !form.sinif_id || !form.sifre) { alert('Ad, email, sınıf ve şifre zorunlu!'); return }
+    if (!form.ad || !form.email || !form.sinif_id || !form.sifre) { toast('Ad, email, sınıf ve şifre zorunlu!'); return }
     setKaydediyor(true)
     const sonNumara = ogrenciler.length > 0 ? Math.max(...ogrenciler.map(o => o.numara)) + 1 : 1
     const res = await fetch('/api/admin/kullanici-olustur', {
@@ -384,17 +395,32 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
       body: JSON.stringify({ email: form.email, password: form.sifre, ad: form.ad, soyad: form.soyad, telefon: form.telefon, sinif_id: form.sinif_id })
     })
     const json = await res.json()
-    if (!res.ok || !json.user) { alert('Kullanıcı oluşturulamadı: ' + (json.error || 'Hata')); setKaydediyor(false); return }
+    if (!res.ok || !json.user) { toast('Kullanıcı oluşturulamadı: ' + (json.error || 'Hata')); setKaydediyor(false); return }
     await supabase.from('ogrenciler').insert({ kullanici_id: json.user.id, sinif_id: form.sinif_id, numara: sonNumara, aktif: true })
     setForm({ ad: '', soyad: '', email: '', telefon: '', sinif_id: '', sifre: '' })
     setModalAcik(false); setKaydediyor(false); yukle()
   }
 
-  async function ogrenciSil(ogrenci: any) {
-    if (!confirm(`${ogrenci.kullanicilar?.ad} ${ogrenci.kullanicilar?.soyad} silinecek. Emin misin?`)) return
-    await supabase.from('ogrenciler').delete().eq('id', ogrenci.id)
-    await supabase.from('kullanicilar').delete().eq('id', ogrenci.kullanici_id)
-    await fetch('/api/admin/kullanici-sil', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: ogrenci.kullanici_id }) })
+  function ogrenciSil(ogrenci: any) {
+    toast(`${ogrenci.kullanicilar?.ad} ${ogrenci.kullanicilar?.soyad} pasife alınacak`, {
+      description: 'Veri silinmez, istenirse geri aktif edilebilir.',
+      action: {
+        label: 'Pasife Al',
+        onClick: async () => {
+          await supabase.from('ogrenciler').update({ aktif: false }).eq('id', ogrenci.id)
+          toast.success(`${ogrenci.kullanicilar?.ad} pasife alındı`)
+          yukle()
+        },
+      },
+      cancel: {
+        label: 'Vazgeç',
+        onClick: () => {},
+      },
+    })
+  }
+
+  async function ogrenciAktifEt(ogrenci: any) {
+    await supabase.from('ogrenciler').update({ aktif: true }).eq('id', ogrenci.id)
     yukle()
   }
 
@@ -402,7 +428,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
     const yeniSifre = prompt(`${ad} için yeni şifre gir (en az 6 karakter):`)
     if (!yeniSifre || yeniSifre.length < 6) return
     const res = await fetch('/api/admin/sifre-sifirla', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: kullaniciId, password: yeniSifre }) })
-    if (res.ok) alert('Şifre değiştirildi!')
+    if (res.ok) toast('Şifre değiştirildi!')
   }
 
   async function sorumlulukAta() {
@@ -431,11 +457,19 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
         <div className={ui.cardHeader}>
           <div>
             <p className={ui.cardTitle}>Öğrenciler</p>
-            <p className="text-xs text-gray-400 mt-0.5">{ogrenciler.length} kayıtlı öğrenci</p>
+            <p className="text-xs text-gray-400 mt-0.5">{ogrenciler.filter(o => o.aktif).length} kayıtlı öğrenci</p>
           </div>
-          <button onClick={() => setModalAcik(true)} className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80">
-            + Öğrenci Ekle
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPasifGoster(!pasifGoster)}
+              className="text-xs border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50"
+            >
+              {pasifGoster ? 'Aktif Öğrenciler' : `Pasif Öğrenciler (${ogrenciler.filter(o => !o.aktif).length})`}
+            </button>
+            <button onClick={() => setModalAcik(true)} className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80">
+              + Öğrenci Ekle
+            </button>
+          </div>
         </div>
 
         {ogrenciler.length === 0 ? (
@@ -454,8 +488,8 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {ogrenciler.map((o) => (
-                  <tr key={o.id} className="hover:bg-gray-50/50 transition-colors">
+                {ogrenciler.filter((o) => pasifGoster ? !o.aktif : o.aktif).map((o) => (
+                  <tr key={o.id} className={`hover:bg-gray-50/50 transition-colors ${!o.aktif ? 'opacity-50' : ''}`}>
                     <td className="px-6 py-4 text-xs text-gray-400 font-mono">#{o.numara}</td>
                     <td className="px-6 py-4">
                       <p className="text-sm font-medium text-gray-900">{o.kullanicilar?.ad} {o.kullanicilar?.soyad}</p>
@@ -481,9 +515,15 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3 justify-end">
-                        <button onClick={() => { setSecilenOgrenci(o); setSorumlulukModalAcik(true) }} className={ui.btnGhost}>Sorumluluk</button>
-                        <button onClick={() => sifreSifirla(o.kullanici_id, `${o.kullanicilar?.ad}`)} className={ui.btnGhost}>Şifre</button>
-                        <button onClick={() => ogrenciSil(o)} className={ui.btnDanger}>Sil</button>
+                        {o.aktif ? (
+                          <>
+                            <button onClick={() => { setSecilenOgrenci(o); setSorumlulukModalAcik(true) }} className={ui.btnGhost}>Sorumluluk</button>
+                            <button onClick={() => sifreSifirla(o.kullanici_id, `${o.kullanicilar?.ad}`)} className={ui.btnGhost}>Şifre</button>
+                            <button onClick={() => ogrenciSil(o)} className={ui.btnDanger}>Pasife Al</button>
+                          </>
+                        ) : (
+                          <button onClick={() => ogrenciAktifEt(o)} className="text-green-600 text-xs hover:text-green-800">Aktif Et</button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -628,11 +668,11 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
 
   async function dersEkle() {
     if (!form.ad || !form.gun || !form.saat) {
-      alert('Ders adı, gün ve saat zorunlu!')
+      toast('Ders adı, gün ve saat zorunlu!')
       return
     }
     if (form.periyot !== 'haftalik' && !form.baslangic_tarihi) {
-      alert('Haftalık olmayan dersler için başlangıç tarihi seçmen lazım!')
+      toast('Haftalık olmayan dersler için başlangıç tarihi seçmen lazım!')
       return
     }
     setKaydediyor(true)
@@ -652,14 +692,23 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
     dersleriYukle(secilenSinif.id)
   }
 
-  async function dersSil(id: string) {
-    if (!confirm('Bu dersi silmek istediğine emin misin?')) return
-    await supabase.from('dersler').delete().eq('id', id)
-    dersleriYukle(secilenSinif.id)
+  function dersSil(id: string) {
+    toast('Bu ders silinecek', {
+      description: 'Bu işlem geri alınamaz.',
+      action: {
+        label: 'Sil',
+        onClick: async () => {
+          await supabase.from('dersler').delete().eq('id', id)
+          toast.success('Ders silindi')
+          dersleriYukle(secilenSinif.id)
+        },
+      },
+      cancel: { label: 'Vazgeç', onClick: () => {} },
+    })
   }
 
   async function iptalKaydet() {
-    if (!iptalGerekce.trim()) { alert('Gerekçe yazman lazım!'); return }
+    if (!iptalGerekce.trim()) { toast('Gerekçe yazman lazım!'); return }
     await supabase.from('ders_oturumlari').insert({
       ders_id: iptalDersi.id,
       tarih: iptalTarih,
@@ -676,11 +725,11 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
 
     setIptalGerekce('')
     setIptalModalAcik(false)
-    alert('Ders iptali kaydedildi ve duyuru yapıldı!')
+    toast('Ders iptali kaydedildi ve duyuru yapıldı!')
   }
 
   async function telafiKaydet() {
-    if (!telafiSaat) { alert('Saat seçmen lazım!'); return }
+    if (!telafiSaat) { toast('Saat seçmen lazım!'); return }
     await supabase.from('ders_oturumlari').insert({
       ders_id: telafiDersi.id,
       tarih: telafiTarih,
@@ -689,7 +738,7 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
     })
     setTelafiSaat('')
     setTelafiModalAcik(false)
-    alert('Telafi dersi eklendi!')
+    toast('Telafi dersi eklendi!')
   }
 
   const gunler = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar']
@@ -971,7 +1020,7 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
 
   async function hocaEkle() {
     if (!form.ad || !form.email || !form.sifre) {
-      alert('Ad, email ve şifre zorunlu!')
+      toast('Ad, email ve şifre zorunlu!')
       return
     }
     setKaydediyor(true)
@@ -991,7 +1040,7 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
 
     const json = await res.json()
     if (!res.ok || !json.user) {
-      alert('Hoca eklenemedi: ' + (json.error || 'Hata'))
+      toast('Hoca eklenemedi: ' + (json.error || 'Hata'))
       setKaydediyor(false)
       return
     }
@@ -1024,11 +1073,20 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
     yukle()
   }
 
-  async function hocaSil(id: string) {
-    if (!confirm('Bu hocayı silmek istediğine emin misin?')) return
-    await supabase.from('ogretmen_dersleri').delete().eq('ogretmen_id', id)
-    await supabase.from('kullanicilar').delete().eq('id', id)
-    yukle()
+  function hocaSil(id: string) {
+    toast('Bu hoca silinecek', {
+      description: 'Bu işlem geri alınamaz.',
+      action: {
+        label: 'Sil',
+        onClick: async () => {
+          await supabase.from('ogretmen_dersleri').delete().eq('ogretmen_id', id)
+          await supabase.from('kullanicilar').delete().eq('id', id)
+          toast.success('Hoca silindi')
+          yukle()
+        },
+      },
+      cancel: { label: 'Vazgeç', onClick: () => {} },
+    })
   }
 
   if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
@@ -1269,7 +1327,7 @@ function YoklamaSekmesi({ programId, supabase, kullanici }: { programId: string,
       const mevcutVar = mevcutYoklamalar.find(y => y.ogrenci_id === ogrenci.id)
 
       if (mevcutVar && !isAdmin) {
-        alert(`${ogrenci.kullanicilar?.ad} için yoklama zaten girilmiş. Sadece admin değiştirebilir.`)
+        toast(`${ogrenci.kullanicilar?.ad} için yoklama zaten girilmiş. Sadece admin değiştirebilir.`)
         continue
       }
 
@@ -1289,7 +1347,7 @@ function YoklamaSekmesi({ programId, supabase, kullanici }: { programId: string,
 
     await mevcutYoklamalariYukle(secilenDers.id, tarih)
     setKaydediyor(false)
-    alert('Yoklama kaydedildi!')
+    toast('Yoklama kaydedildi!')
   }
 
   const durumlar = [
@@ -1497,7 +1555,7 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
   }, [secilenDers])
 
   async function sinavEkle() {
-    if (!sinavForm.baslik || !sinavForm.tarih) { alert('Başlık ve tarih zorunlu!'); return }
+    if (!sinavForm.baslik || !sinavForm.tarih) { toast('Başlık ve tarih zorunlu!'); return }
     setKaydediyor(true)
 
     const { data: sinav } = await supabase.from('sinavlar').insert({
@@ -1524,11 +1582,11 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
     setSinavModalAcik(false)
     setKaydediyor(false)
     sinavlariYukle(secilenDers.id)
-    alert('Sınav eklendi ve duyuru yapıldı!')
+    toast('Sınav eklendi ve duyuru yapıldı!')
   }
 
   async function notKaydet() {
-    if (!secilenSinav) { alert('Önce bir sınav seç!'); return }
+    if (!secilenSinav) { toast('Önce bir sınav seç!'); return }
     setKaydediyor(true)
     for (const o of ogrenciler) {
       const puan = notlar[o.id]
@@ -1545,7 +1603,7 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
     setNotlar({})
     setKaydediyor(false)
     gecmisNotlariYukle(secilenDers.id)
-    alert('Notlar kaydedildi!')
+    toast('Notlar kaydedildi!')
   }
 
   if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
@@ -1792,7 +1850,7 @@ function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: strin
 
   async function duyuruEkle() {
     if (!form.baslik.trim() || !form.icerik.trim()) {
-      alert('Başlık ve içerik zorunlu!')
+      toast('Başlık ve içerik zorunlu!')
       return
     }
     setKaydediyor(true)
@@ -1826,10 +1884,19 @@ function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: strin
     yukle()
   }
 
-  async function duyuruSil(id: string) {
-    if (!confirm('Bu duyuruyu silmek istediğine emin misin?')) return
-    await supabase.from('duyurular').delete().eq('id', id)
-    yukle()
+  function duyuruSil(id: string) {
+    toast('Bu duyuru silinecek', {
+      description: 'Bu işlem geri alınamaz.',
+      action: {
+        label: 'Sil',
+        onClick: async () => {
+          await supabase.from('duyurular').delete().eq('id', id)
+          toast.success('Duyuru silindi')
+          yukle()
+        },
+      },
+      cancel: { label: 'Vazgeç', onClick: () => {} },
+    })
   }
 
   if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>

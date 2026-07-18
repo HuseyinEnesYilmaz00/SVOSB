@@ -41,6 +41,11 @@ export default function OgrenciPage() {
         .select('*, siniflar (*, programlar (*))')
         .eq('kullanici_id', user.id).single()
       if (!o) { setYukleniyor(false); return }
+      if (o.aktif === false) {
+        await supabase.auth.signOut()
+        router.push('/giris')
+        return
+      }
       setOgrenci(o)
       setSinif(o.siniflar)
       setProgram(o.siniflar?.programlar)

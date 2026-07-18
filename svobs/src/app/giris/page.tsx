@@ -42,6 +42,20 @@ export default function GirisPage() {
     } else if (kullanici?.rol === 'ogretmen') {
       router.push('/ogretmen')
     } else {
+      // Öğrenci - aktif mi kontrol et
+      const { data: ogrenciKaydi } = await supabase
+        .from('ogrenciler')
+        .select('aktif')
+        .eq('kullanici_id', data.user.id)
+        .single()
+
+      if (ogrenciKaydi && ogrenciKaydi.aktif === false) {
+        await supabase.auth.signOut()
+        setHata('Hesabınız pasife alınmış. Lütfen öğretmeninizle iletişime geçin.')
+        setYukleniyor(false)
+        return
+      }
+
       router.push('/ogrenci')
     }
   }

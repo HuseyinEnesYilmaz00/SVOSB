@@ -1,4 +1,5 @@
 'use client'
+import { toast } from 'sonner'
 
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
@@ -66,11 +67,11 @@ export function SorumlulukPaneli({ ogrenciId, dersler, supabase }: {
       const durum = yoklamalar[o.id]
       if (!durum) continue
       const mevcut = mevcutYoklamalar.find(y => y.ogrenci_id === o.id)
-      if (mevcut) { alert('Kaydedilmiş yoklamayı sadece admin değiştirebilir!'); continue }
+      if (mevcut) { toast('Kaydedilmiş yoklamayı sadece admin değiştirebilir!'); continue }
       await supabase.from('yoklamalar').insert({ ogrenci_id: o.id, ders_id: secilenDers.ders_id, tarih, durum })
     }
     setKaydediyor(false)
-    alert('Yoklama kaydedildi!')
+    toast('Yoklama kaydedildi!')
   }
 
   const durumlar = [
@@ -128,7 +129,7 @@ export function SorumlulukPaneli({ ogrenciId, dersler, supabase }: {
                   key={d.value}
                   onClick={() => {
                     const mevcut = mevcutYoklamalar.find(y => y.ogrenci_id === o.id)
-                    if (mevcut) { alert('Bu yoklama zaten kaydedilmiş. Sadece admin değiştirebilir.'); return }
+                    if (mevcut) { toast('Bu yoklama zaten kaydedilmiş. Sadece admin değiştirebilir.'); return }
                     setYoklamalar(prev => ({ ...prev, [o.id]: d.value }))
                   }}
                   className={cn(
