@@ -45,11 +45,14 @@ export default function OgrenciPage() {
       setSinif(o.siniflar)
       setProgram(o.siniflar?.programlar)
 
+      
       // Duyurular
+      const sinifIdGuvenli = o.siniflar?.id || '00000000-0000-0000-0000-000000000000'
       const { data: duy } = await supabase
         .from('duyurular')
-        .select('*, kullanicilar (ad, soyad)')
+        .select('*, kullanicilar!duyurular_yayinlayan_id_fkey (ad, soyad)')
         .eq('program_id', o.siniflar?.programlar?.id)
+        .or(`hedef_tipi.eq.tumu,hedef_sinif_id.eq.${sinifIdGuvenli},hedef_kullanici_id.eq.${user.id}`)
         .order('olusturulma_tarihi', { ascending: false })
       setDuyurular(duy || [])
 
@@ -226,6 +229,9 @@ export default function OgrenciPage() {
           </Card>
         )}
 
+        {/* Ders Programı */}
+        <OgrenciDersProgrami sinifId={sinif?.id} supabase={supabase} />
+
         {/* Sorumlu Paneli */}
         {dersSorumluluklari.length > 0 && (
           <SorumlulukPaneli
@@ -270,5 +276,124 @@ export default function OgrenciPage() {
         </Card>
       </main>
     </div>
+  )
+}
+
+function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase: any }) {
+  const [dersler, setDersler] = useState<any[]>([])
+  const [iptaller, setIptaller] = useState<any[]>([])
+  const [yukleniyor, setYukleniyor] = useState(true)
+
+  useEffect(() => {
+    async function yukle() {
+      if (!sinifId) return
+      const { data } = await supabase
+        .from('dersler')
+        .select('*, ogretmen_dersleri (kullanicilar (ad, soyad))')
+        .eq('sinif_id', sinifId)
+        .eq('aktif', true)
+        .order('gun')
+      setDersler(data || [])
+
+      const dersIdleri = (data || []).map((d: any) => d.id)
+      if (dersIdleri.length > 0) {
+        const bugun = new Date()
+        const haftaBasi = new Date(bugun)
+        haftaBasi.setDate(bugun.getDate() - ((bugun.getDay() + 6) % 7))
+        const haftaBasiStr = haftaBasi.toISOString().split('T')[0]
+        const { data: ipt } = await supabase
+          .from('ders_oturumlari')
+          .select('*')
+          .in('ders_id', dersIdleri)
+          .eq('durum', 'iptal')
+          .gte('tarih', haftaBasiStr)
+        setIptaller(ipt || [])
+      }
+      setYukleniyor(false)
+    }
+    yukle()
+  }, [sinifId])
+
+  const gunler = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar']
+  const periyotlar: Record<string, string> = {
+    haftalik: 'Her hafta', '2haftada1': '2 haftada bir',
+    '3haftada1': '3 haftada bir', ayda1: 'Ayda bir'
+  }
+
+  function dersbuHaftaVarMi(ders: any): boolean {
+    if (ders.periyot === 'haftalik') return true
+    if (!ders.baslangic_tarihi) return true
+    const bugun = new Date()
+    const baslangic = new Date(ders.baslangic_tarihi)
+    const buHaftaBasi = new Date(bugun)
+    buHaftaBasi.setDate(bugun.getDate() - ((bugun.getDay() + 6) % 7))
+    buHaftaBasi.setHours(0, 0, 0, 0)
+    const baslangicHaftaBasi = new Date(baslangic)
+    baslangicHaftaBasi.setDate(baslangic.getDate() - ((baslangic.getDay() + 6) % 7))
+    baslangicHaftaBasi.setHours(0, 0, 0, 0)
+    const farkHafta = Math.round((buHaftaBasi.getTime() - baslangicHaftaBasi.getTime()) / (7 * 24 * 60 * 60 * 1000))
+    if (farkHafta < 0) return false
+    switch (ders.periyot) {
+      case '2haftada1': return farkHafta % 2 === 0
+      case '3haftada1': return farkHafta % 3 === 0
+      case 'ayda1': return farkHafta % 4 === 0
+      default: return true
+    }
+  }
+
+  if (yukleniyor) return null
+
+  const gunlereGore = gunler.map(gun => ({
+    gun,
+    dersler: dersler.filter(d => d.gun === gun)
+  })).filter(g => g.dersler.length > 0)
+
+  if (gunlereGore.length === 0) return null
+
+  return (
+    <Card className="p-0 overflow-hidden">
+      <div className="px-5 py-4 border-b border-border">
+        <h2 className="font-medium text-sm text-foreground">Haftalık Ders Programı</h2>
+      </div>
+      <div className="overflow-x-auto">
+        <div className="grid grid-cols-7 min-w-[600px]">
+          {/* Gün başlıkları */}
+          {gunler.map(gun => (
+            <div key={gun} className="px-2 py-2 border-b border-r border-border bg-muted/50 last:border-r-0">
+              <p className="text-xs font-medium text-muted-foreground text-center">{gun.slice(0, 3)}</p>
+            </div>
+          ))}
+          {/* Ders slotları */}
+          {gunler.map(gun => {
+            const gunDersleri = dersler.filter(d => d.gun === gun)
+            return (
+              <div key={gun} className="border-r border-border last:border-r-0 min-h-[120px] p-1.5 space-y-1">
+                {gunDersleri.map((d: any) => {
+                  const iptal = iptaller.find(i => i.ders_id === d.id)
+                  const buHafta = dersbuHaftaVarMi(d)
+                  return (
+                    <div
+                      key={d.id}
+                      className={`rounded-md px-2 py-1.5 text-xs ${
+                        iptal
+                          ? 'bg-destructive/10 text-destructive border border-destructive/20'
+                          : !buHafta
+                          ? 'bg-muted text-muted-foreground border border-border opacity-50'
+                          : 'bg-primary/10 text-primary border border-primary/20'
+                      }`}
+                    >
+                      <p className="font-medium leading-tight">{d.ad}</p>
+                      <p className="opacity-70 mt-0.5">{d.saat}</p>
+                      {iptal && <p className="font-medium mt-0.5">İptal</p>}
+                      {!buHafta && !iptal && <p className="mt-0.5">Bu hafta yok</p>}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </Card>
   )
 }

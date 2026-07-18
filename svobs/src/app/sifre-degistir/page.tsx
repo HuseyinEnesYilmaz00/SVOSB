@@ -44,7 +44,7 @@ export default function SifreDegistirPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50">
+    <main className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#fcfaf4' }}>
       <div className="bg-white p-8 rounded-xl shadow-md w-full max-w-md">
         <h1 className="text-xl font-bold text-gray-800 mb-1">Şifre Değiştir</h1>
         <p className="text-sm text-gray-500 mb-6">Yeni şifreni gir</p>

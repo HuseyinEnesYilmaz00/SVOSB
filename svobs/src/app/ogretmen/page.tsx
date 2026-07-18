@@ -528,8 +528,8 @@ function OgretmenNotlar({ dersId, sinifId, dersAd, supabase }: any) {
       )}
 
       {sinavModalAcik && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
             <h3 className="font-semibold text-gray-800 mb-4">Sınav Ekle</h3>
             <div className="space-y-3">
               <div>
@@ -658,8 +658,8 @@ function OgretmenDuyurular({ dersId, sinifId, supabase, kullanici }: any) {
       </div>
 
       {modalAcik && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
             <h3 className="font-semibold text-gray-800 mb-4">Yeni Duyuru</h3>
             <div className="space-y-3">
               <div>

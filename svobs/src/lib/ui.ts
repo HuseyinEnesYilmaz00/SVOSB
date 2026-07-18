@@ -23,7 +23,7 @@ export const ui = {
   btnVariants: {
     variant: {
       primary: 'text-white shadow-sm',
-      primaryEsma: 'bg-purple-500 hover:bg-purple-600 shadow-sm shadow-purple-200',
+      primaryEsma: 'bg-[#a53860] hover:bg-[#8f2f52] shadow-sm shadow-[#a53860]/20',
       primaryDefault: 'bg-emerald-700 hover:bg-emerald-800 shadow-sm shadow-emerald-200',
       secondary: 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50',
       danger: 'text-xs text-red-400 hover:text-red-600',
@@ -37,7 +37,7 @@ export const ui = {
   },
   btnPrimary: (tema: string) => `inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all active:scale-95 ${
     tema === 'esma' 
-      ? 'bg-purple-500 hover:bg-purple-600 shadow-sm shadow-purple-200' 
+      ? 'bg-[#a53860] hover:bg-[#8f2f52] shadow-sm shadow-[#a53860]/20' 
       : 'bg-emerald-700 hover:bg-emerald-800 shadow-sm shadow-emerald-200'
   }`,
   btnSecondary: 'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 transition-all active:scale-95',

@@ -107,7 +107,10 @@ export default function GirisPage() {
               {yukleniyor ? 'Giriş yapılıyor...' : 'Giriş Yap'}
             </Button>
 
-            <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <button
+             onClick={() => router.push('/sifremi-unuttum')}
+             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
               Şifremi unuttum
             </button>
           </div>
