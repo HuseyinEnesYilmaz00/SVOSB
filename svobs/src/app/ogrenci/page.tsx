@@ -449,15 +449,24 @@ export default function OgrenciPage() {
                   </div>
                 ))}
               </div>
-              <div className="px-5 py-3 border-t border-border">
+                            <div className="px-5 py-3 border-t border-border">
                 <a href="/sifre-degistir" className="text-sm text-primary hover:underline">
                   Şifre Değiştir
                 </a>
               </div>
             </Card>
+
+            {/* GÖRÜNÜR GÖRÜNMEZ GİZLİ İMZA */}
+            <div className="flex justify-center mt-12 pb-6">
+              <span className="text-[10px] text-muted-foreground/20 select-none cursor-default font-mono">
+                enes°
+              </span>
+            </div>
+            
           </div>
         )}
       </main>
+
 
       {secilenRozet && (
         <div
