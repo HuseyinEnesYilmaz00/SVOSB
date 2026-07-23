@@ -25,8 +25,13 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
   const [seciliAlanlar, setSeciliAlanlar] = useState<VeriAlani[]>(['bilgiler']);
   const [ciktiTuru, setCiktiTuru] = useState<'tablo' | 'grafikli' | 'pdf'>('tablo');
   const [yukleniyor, setYukleniyor] = useState(false);
+  
+  // JSON Yedekleme için ayrı loading state'i
+  const [yedekIndiriyor, setYedekIndiriyor] = useState(false);
+  
   const supabase = createClient();
 
+  // --- SENİN EXCEL/PDF RAPORLAMA FONKSİYONLARIN BAŞLANGICI ---
   async function kapsamSec(k: Kapsam) {
     setKapsam(k);
     setYukleniyor(true);
@@ -46,9 +51,7 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
       if (error) { alert('Liste alınamadı: ' + error.message); return; }
       setHedefler((data ?? []).map((d: any) => ({ id: d.id, ad: d.ad })));
     } else {
-      let sorgu = supabase
-        .from('ogrenciler')
-        .select('id, kullanicilar(ad, soyad), siniflar!inner(program_id)');
+      let sorgu = supabase.from('ogrenciler').select('id, kullanicilar(ad, soyad), siniflar!inner(program_id)');
       if (izinliProgramIdler) sorgu = sorgu.in('siniflar.program_id', izinliProgramIdler);
       const { data, error } = await sorgu;
       setYukleniyor(false);
@@ -66,19 +69,15 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
   }
 
   function alanToggle(a: VeriAlani) {
-    setSeciliAlanlar((prev) =>
-      prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]
-    );
+    setSeciliAlanlar((prev) => prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]);
   }
 
   async function ogrenciIdleriniGetir(): Promise<string[]> {
     if (kapsam === 'kisi') return seciliKisiler;
-
     if (kapsam === 'sinif') {
       const { data } = await supabase.from('ogrenciler').select('id').eq('sinif_id', seciliHedef);
       return (data ?? []).map((d: any) => d.id);
     }
-
     const { data: siniflarData } = await supabase.from('siniflar').select('id').eq('program_id', seciliHedef);
     const sinifIdleri = (siniflarData ?? []).map((s: any) => s.id);
     if (sinifIdleri.length === 0) return [];
@@ -87,10 +86,7 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
   }
 
   async function ogrenciAdHaritasi(ogrenciIdleri: string[]): Promise<Record<string, string>> {
-    const { data } = await supabase
-      .from('ogrenciler')
-      .select('id, kullanicilar(ad, soyad)')
-      .in('id', ogrenciIdleri);
+    const { data } = await supabase.from('ogrenciler').select('id, kullanicilar(ad, soyad)').in('id', ogrenciIdleri);
     const harita: Record<string, string> = {};
     (data ?? []).forEach((d: any) => {
       harita[d.id] = `${d.kullanicilar?.ad ?? ''} ${d.kullanicilar?.soyad ?? ''}`.trim();
@@ -98,7 +94,6 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
     return harita;
   }
 
-  // Öğrenci için ders x durum sayıları (dashboard'daki mantığın aynısı)
   async function ogrenciGrafikVerisi(ogrenciId: string) {
     const { data: ogrenci } = await supabase.from('ogrenciler').select('sinif_id').eq('id', ogrenciId).single();
     if (!ogrenci) return [];
@@ -117,28 +112,30 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
     });
   }
 
-  // Öğrenci genel ortalaması (OgrencilerSekme'deki mantığın aynısı)
   async function ogrenciOrtalamalari(ogrenciId: string) {
-    const { data: notlar } = await supabase.from('notlar').select('puan').eq('ogrenci_id', ogrenciId);
-    const { data: yoklamalar } = await supabase.from('yoklamalar').select('durum').eq('ogrenci_id', ogrenciId);
-    const devamPuanlari: Record<string, number> = { katildi: 100, gec: 75, izinli: 50, katilmadi: 0 };
+  const { data: notlar } = await supabase.from('notlar').select('puan').eq('ogrenci_id', ogrenciId);
+  const { data: yoklamalar } = await supabase.from('yoklamalar').select('durum').eq('ogrenci_id', ogrenciId);
+  
+  // Geç ve İzinli = 0
+  const devamPuanlari: Record<string, number> = { katildi: 100, gec: 0, izinli: 0, katilmadi: 0 };
 
-    const sinavOrt = notlar && notlar.length > 0 ? notlar.reduce((s: number, n: any) => s + n.puan, 0) / notlar.length : null;
-    const devamOrt = yoklamalar && yoklamalar.length > 0 ? yoklamalar.reduce((s: number, y: any) => s + (devamPuanlari[y.durum] || 0), 0) / yoklamalar.length : null;
+  const sinavOrt = notlar && notlar.length > 0 ? notlar.reduce((s: number, n: any) => s + n.puan, 0) / notlar.length : null;
+  const devamOrt = yoklamalar && yoklamalar.length > 0 ? yoklamalar.reduce((s: number, y: any) => s + (devamPuanlari[y.durum] || 0), 0) / yoklamalar.length : null;
 
-    let genel: number | null = null;
-    if (sinavOrt !== null && devamOrt !== null) genel = sinavOrt * 0.7 + devamOrt * 0.3;
-    else if (sinavOrt !== null) genel = sinavOrt;
-    else if (devamOrt !== null) genel = devamOrt;
+  let genel: number | null = null;
+  // %50 / %50 Ağırlık
+  if (sinavOrt !== null && devamOrt !== null) genel = sinavOrt * 0.5 + devamOrt * 0.5;
+  else if (sinavOrt !== null) genel = sinavOrt;
+  else if (devamOrt !== null) genel = devamOrt;
 
-    return {
-      notOrt: sinavOrt !== null ? Math.round(sinavOrt * 10) / 10 : null,
-      yoklamaOrt: devamOrt !== null ? Math.round(devamOrt * 10) / 10 : null,
-      genelOrt: genel !== null ? Math.round(genel * 10) / 10 : null,
-    };
-  }
+  return {
+    notOrt: sinavOrt !== null ? Math.round(sinavOrt * 10) / 10 : null,
+    yoklamaOrt: devamOrt !== null ? Math.round(devamOrt * 10) / 10 : null,
+    genelOrt: genel !== null ? Math.round(genel * 10) / 10 : null,
+  };
+}
 
-  // Canvas ile grafik çizip PNG base64 döndürür (PDF'teki bar chart formatı)
+
   function grafikCiz(veri: any[], baslik: string): string {
     const canvas = document.createElement('canvas');
     canvas.width = 900;
@@ -157,7 +154,6 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
     const grafikGenis = canvas.width - alanSol - alanSag;
     const maxDeger = Math.max(1, ...veri.flatMap((v) => [v.Devam, v['Geç Katıldı'], v.Mazeret, v.Katılmadı]));
 
-    // eksen çizgisi
     ctx.strokeStyle = '#d1d5db';
     ctx.beginPath();
     ctx.moveTo(alanSol, alanUst);
@@ -165,7 +161,6 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
     ctx.lineTo(alanSol + grafikGenis, alanUst + grafikYuksek);
     ctx.stroke();
 
-    // y ekseni ızgara çizgileri + sayı etiketleri
     const adimSayisi = 5;
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'right';
@@ -206,7 +201,6 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
       ctx.fillText(v.ad, dersX + dersGenislik * 0.35, alanUst + grafikYuksek + 18);
     });
 
-    // legend
     let legendX = alanSol;
     Object.entries(DURUM_RENK).forEach(([ad, renk]) => {
       ctx.fillStyle = renk;
@@ -218,19 +212,21 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
       legendX += ctx.measureText(ad).width + 40;
     });
 
-    return canvas.toDataURL('image/png').split(',')[1]; // base64 (data: öneki olmadan)
+    return canvas.toDataURL('image/png').split(',')[1];
   }
 
   function dersDegeriHesapla(ogrenciId: string, dersId: string, tumNotlar: any[], tumYoklamalar: any[]): number | null {
-    const notlarBu = tumNotlar.filter((n) => n.ogrenci_id === ogrenciId && n.ders_id === dersId);
-    if (notlarBu.length > 0) {
-      return Math.round((notlarBu.reduce((s, n) => s + n.puan, 0) / notlarBu.length) * 10) / 10;
-    }
-    const devamPuanlari: Record<string, number> = { katildi: 100, gec: 75, izinli: 50, katilmadi: 0 };
-    const yoklamaBu = tumYoklamalar.filter((y) => y.ogrenci_id === ogrenciId && y.ders_id === dersId);
-    if (yoklamaBu.length === 0) return null;
-    return Math.round((yoklamaBu.reduce((s, y) => s + (devamPuanlari[y.durum] || 0), 0) / yoklamaBu.length) * 10) / 10;
+  const notlarBu = tumNotlar.filter((n) => n.ogrenci_id === ogrenciId && n.ders_id === dersId);
+  if (notlarBu.length > 0) {
+    return Math.round((notlarBu.reduce((s, n) => s + n.puan, 0) / notlarBu.length) * 10) / 10;
   }
+  // Geç ve İzinli = 0
+  const devamPuanlari: Record<string, number> = { katildi: 100, gec: 0, izinli: 0, katilmadi: 0 };
+  const yoklamaBu = tumYoklamalar.filter((y) => y.ogrenci_id === ogrenciId && y.ders_id === dersId);
+  if (yoklamaBu.length === 0) return null;
+  return Math.round((yoklamaBu.reduce((s, y) => s + (devamPuanlari[y.durum] || 0), 0) / yoklamaBu.length) * 10) / 10;
+}
+
 
   async function fontYukleVeEkle(doc: jsPDF) {
     const res = await fetch('/fonts/Roboto-Regular.ttf');
@@ -260,7 +256,7 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
     const { data: tumYoklamalar } = await supabase.from('yoklamalar').select('ogrenci_id, ders_id, durum').in('ogrenci_id', ogrenciIdleri);
 
     let ilkSayfa = true;
-    const devamPuanlari: Record<string, number> = { katildi: 100, gec: 75, izinli: 50, katilmadi: 0 };
+    const devamPuanlari: Record<string, number> = { katildi: 100, gec: 0, izinli: 0, katilmadi: 0 };
 
     for (const sinifId of sinifIdleri) {
       const { data: dersler } = await supabase.from('dersler').select('id, ad').eq('sinif_id', sinifId).order('ad');
@@ -284,11 +280,18 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
           return v === null ? '-' : v;
         });
 
+                // pdfOlustur fonksiyonunun içindeki döngüde yer alan kısmı güncelliyoruz:
         const notlarBuOgrenci = (tumNotlar ?? []).filter((n: any) => n.ogrenci_id === o.id);
         const yoklamalarBuOgrenci = (tumYoklamalar ?? []).filter((y: any) => y.ogrenci_id === o.id);
+        
         const notOrt = notlarBuOgrenci.length > 0 ? Math.round((notlarBuOgrenci.reduce((s: number, n: any) => s + n.puan, 0) / notlarBuOgrenci.length) * 10) / 10 : null;
+        
+        // Geç ve İzinli = 0
+        const devamPuanlari: Record<string, number> = { katildi: 100, gec: 0, izinli: 0, katilmadi: 0 };
         const yoklamaOrt = yoklamalarBuOgrenci.length > 0 ? Math.round((yoklamalarBuOgrenci.reduce((s: number, y: any) => s + (devamPuanlari[y.durum] || 0), 0) / yoklamalarBuOgrenci.length) * 10) / 10 : null;
-        const genelOrt = notOrt !== null && yoklamaOrt !== null ? Math.round((notOrt * 0.7 + yoklamaOrt * 0.3) * 10) / 10 : (notOrt ?? yoklamaOrt);
+        
+        // %50 / %50 Ağırlık
+        const genelOrt = notOrt !== null && yoklamaOrt !== null ? Math.round((notOrt * 0.5 + yoklamaOrt * 0.5) * 10) / 10 : (notOrt ?? yoklamaOrt);
 
         satirlar.push([o.numara, adSoyad, ...dersDegerleri, notOrt ?? '-', yoklamaOrt ?? '-', genelOrt ?? '-']);
       }
@@ -326,7 +329,6 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
   async function grafikliExcelOlustur(ogrenciIdleri: string[]) {
     const wb = new ExcelJS.Workbook();
 
-    // Özet sayfası
     const { data } = await supabase
       .from('ogrenciler')
       .select('id, numara, kullanicilar(ad, soyad), siniflar(ad)')
@@ -354,7 +356,6 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
         genelOrt: ort.genelOrt ?? '-',
       });
 
-      // Her öğrenci için ayrı sayfa + grafik
       const adSoyad = `${(o.kullanicilar as any)?.ad ?? ''} ${(o.kullanicilar as any)?.soyad ?? ''}`.trim();
       const sayfaAdi = adSoyad.slice(0, 28) || 'Öğrenci';
       const ogrenciSayfa = wb.addWorksheet(sayfaAdi);
@@ -451,15 +452,10 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
         alert('Seçilen kapsamda öğrenci bulunamadı.');
         return;
       }
-
-      if (ciktiTuru === 'grafikli') {
-        await grafikliExcelOlustur(ogrenciIdleri);
-      } else if (ciktiTuru === 'pdf') {
-        await pdfOlustur(ogrenciIdleri);
-      } else {
-        await grafiksizExcelOlustur(ogrenciIdleri);
-      }
-
+      if (ciktiTuru === 'grafikli') await grafikliExcelOlustur(ogrenciIdleri);
+      else if (ciktiTuru === 'pdf') await pdfOlustur(ogrenciIdleri);
+      else await grafiksizExcelOlustur(ogrenciIdleri);
+      
       setAcik(false);
       setAdim('kapsam');
     } catch (e: any) {
@@ -469,14 +465,114 @@ export default function ExportButton({ izinliProgramIdler }: { izinliProgramIdle
     }
   }
 
+  // --- YENİ EKLENEN JSON YEDEKLEME FONKSİYONU ---
+  async function tamYedekAl() {
+    if (!izinliProgramIdler || izinliProgramIdler.length === 0) {
+      alert('Aktif program bulunamadı. Lütfen sayfayı yenileyip tekrar deneyin.');
+      return;
+    }
+
+    const programId = izinliProgramIdler[0];
+    setYedekIndiriyor(true);
+
+    try {
+      // 1. Program bilgisini al
+      const { data: programData } = await supabase.from('programlar').select('*').eq('id', programId).single();
+
+      // 2. Sınıfları al
+      const { data: siniflar } = await supabase.from('siniflar').select('*').eq('program_id', programId);
+      const sinifIdleri = siniflar?.map(s => s.id) || [];
+
+      let ogrenciler = [], dersler = [], notlar = [], yoklamalar = [], odevler = [], duyurular = [];
+
+      if (sinifIdleri.length > 0) {
+        // 3. Öğrenciler
+        const { data: oData } = await supabase.from('ogrenciler').select('*, kullanicilar(*)').in('sinif_id', sinifIdleri);
+        ogrenciler = oData || [];
+
+        // 4. Dersler
+        const { data: dData } = await supabase.from('dersler').select('*').in('sinif_id', sinifIdleri);
+        dersler = dData || [];
+        
+        const dersIdleri = dersler.map(d => d.id);
+
+        if (dersIdleri.length > 0) {
+          // 5. Notlar
+          const { data: nData } = await supabase.from('notlar').select('*').in('ders_id', dersIdleri);
+          notlar = nData || [];
+
+          // 6. Yoklamalar
+          const { data: yData } = await supabase.from('yoklamalar').select('*').in('ders_id', dersIdleri);
+          yoklamalar = yData || [];
+
+          // 7. Ödevler
+          const { data: odData } = await supabase.from('odevler').select('*').in('ders_id', dersIdleri);
+          odevler = odData || [];
+        }
+      }
+
+      // 8. Duyurular
+      const { data: duyuruData } = await supabase.from('duyurular').select('*').eq('program_id', programId);
+      duyurular = duyuruData || [];
+
+      // Tüm veriyi birleştir
+      const yedekVerisi = {
+        olusturulma_tarihi: new Date().toISOString(),
+        program: programData,
+        siniflar,
+        ogrenciler,
+        dersler,
+        notlar,
+        yoklamalar,
+        odevler,
+        duyurular
+      };
+
+      // Blob ile bilgisayara JSON olarak indir
+      const jsonString = JSON.stringify(yedekVerisi, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `SVOBS_Yedek_${programData?.ad?.replace(/\s+/g, '_') || 'Program'}_${new Date().toISOString().split('T')[0]}.json`;
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+    } catch (error: any) {
+      alert('Yedek alınırken bir hata oluştu: ' + error.message);
+    } finally {
+      setYedekIndiriyor(false);
+    }
+  }
+
   const devamEdilebilir = kapsam === 'kisi' ? seciliKisiler.length > 0 : !!seciliHedef;
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setAcik(true)}>
-        Excel
-      </Button>
+      <div className="flex gap-2 items-center">
+        {/* SENİN EXCEL/PDF BUTONUN */}
+        <Button variant="outline" size="sm" onClick={() => setAcik(true)}>
+          Rapor / Excel
+        </Button>
+        
+        {/* YENİ EKLENEN SİSTEM YEDEKLEME BUTONU */}
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={tamYedekAl} 
+          disabled={yedekIndiriyor}
+          className={yedekIndiriyor ? 'animate-pulse bg-amber-50 text-amber-600 border-amber-200' : ''}
+        >
+          {yedekIndiriyor ? 'Hazırlanıyor...' : 'Tam Yedek İndir (JSON)'}
+        </Button>
+      </div>
 
+      {/* SENİN MEVCUT MODAL KODLARIN */}
       {acik && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl max-h-[85vh] overflow-y-auto">

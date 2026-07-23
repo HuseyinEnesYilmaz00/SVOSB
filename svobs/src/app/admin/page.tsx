@@ -12,6 +12,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import { guncelDonem, guncelAkademikDonem } from '@/lib/donem'
 
 
 
@@ -84,6 +85,7 @@ export default function AdminPage() {
     { id: 'dersler', ad: 'Dersler' },
     { id: 'yoklama', ad: 'Devam' },
     { id: 'notlar', ad: 'Notlar' },
+    { id: 'odevler', ad: 'Ödevler' },
     { id: 'duyurular', ad: 'Duyurular' },
     { id: 'hocalar', ad: 'Hocalar' },
     { id: 'genelbakis', ad: 'Genel Bakış' },
@@ -170,6 +172,9 @@ export default function AdminPage() {
         {aktifSekme === 'notlar' && (
           <NotlarSekmesi programId={aktifProgram?.id} supabase={supabase} />
         )}
+        {aktifSekme === 'odevler' && (
+          <OdevlerSekmesi programId={aktifProgram?.id} supabase={supabase} />
+        )}
         {aktifSekme === 'duyurular' && (
           <DuyurularSekmesi programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
         )}
@@ -190,21 +195,35 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
   const [yukleniyor, setYukleniyor] = useState(true)
   const [modalAcik, setModalAcik] = useState(false)
   const [yeniAd, setYeniAd] = useState('')
-  const [yeniDonem, setYeniDonem] = useState('')
+  const [yeniDonem, setYeniDonem] = useState(() => guncelAkademikDonem())
   const [kaydediyor, setKaydediyor] = useState(false)
+  const [arsivGoster, setArsivGoster] = useState(false)
+
+  // GEÇMİŞ MODAL STATELERİ
+  const [gecmisModalAcik, setGecmisModalAcik] = useState(false)
+  const [secilenArsivSinif, setSecilenArsivSinif] = useState<any>(null)
+  const [gecmisNotlar, setGecmisNotlar] = useState<any[]>([])
+  const [gecmisYoklamalar, setGecmisYoklamalar] = useState<any[]>([])
+  const [gecmisYukleniyor, setGecmisYukleniyor] = useState(false)
+  const [gecmisSekme, setGecmisSekme] = useState<'notlar' | 'yoklamalar'>('notlar')
 
   async function yukle() {
     if (!programId) return
-    const { data } = await supabase
-      .from('siniflar')
-      .select('*')
-      .eq('program_id', programId)
-      .order('ad')
+    setYukleniyor(true)
+    let query = supabase.from('siniflar').select('*').eq('program_id', programId).order('ad')
+
+    if (arsivGoster) {
+      query = query.eq('arsivlendi', true)
+    } else {
+      query = query.or('arsivlendi.eq.false,arsivlendi.is.null')
+    }
+
+    const { data } = await query
     setSiniflar(data || [])
     setYukleniyor(false)
   }
 
-  useEffect(() => { yukle() }, [programId])
+  useEffect(() => { yukle() }, [programId, arsivGoster])
 
   async function sinifEkle() {
     if (!yeniAd.trim()) return
@@ -212,7 +231,7 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
     await supabase.from('siniflar').insert({
       program_id: programId,
       ad: yeniAd.trim(),
-      donem: yeniDonem.trim() || '2024-2025'
+      donem: yeniDonem.trim() || guncelAkademikDonem()
     })
     setYeniAd('')
     setYeniDonem('')
@@ -236,24 +255,153 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
     })
   }
 
+  function sinifArsivle(id: string) {
+    toast('Bu sınıf arşive kaldırılacak', {
+      description: 'Sınıf ve bağlı verileri salt okunur olarak geçmişe taşınacak.',
+      action: {
+        label: 'Arşivle',
+        onClick: async () => {
+          await supabase.from('siniflar').update({ arsivlendi: true }).eq('id', id)
+          toast.success('Sınıf başarıyla arşivlendi!')
+          yukle()
+        },
+      },
+      cancel: { label: 'Vazgeç', onClick: () => {} },
+    })
+  }
+
+  function sinifArsivdenCikar(id: string) {
+    toast('Bu sınıf arşivden çıkarılacak', {
+      description: 'Sınıf tekrar aktif hale gelecek.',
+      action: {
+        label: 'Aktif Et',
+        onClick: async () => {
+          await supabase.from('siniflar').update({ arsivlendi: false }).eq('id', id)
+          toast.success('Sınıf başarıyla aktif edildi!')
+          yukle()
+        },
+      },
+      cancel: { label: 'Vazgeç', onClick: () => {} },
+    })
+  }
+
+  // GEÇMİŞİ GETİR FONKSİYONU
+  async function gecmisiIncele(s: any) {
+    setSecilenArsivSinif(s)
+    setGecmisModalAcik(true)
+    setGecmisYukleniyor(true)
+    setGecmisSekme('notlar')
+
+    // 1. Sınıfın derslerini bul
+    const { data: dersData } = await supabase.from('dersler').select('id, ad').eq('sinif_id', s.id)
+    const dersIdleri = dersData?.map((d: any) => d.id) || []
+
+    if (dersIdleri.length === 0) {
+      setGecmisNotlar([])
+      setGecmisYoklamalar([])
+      setGecmisYukleniyor(false)
+      return
+    }
+
+    // 2. Derslere ait Notları ve Yoklamaları çek
+    const { data: nData } = await supabase.from('notlar').select('*').in('ders_id', dersIdleri).order('tarih', { ascending: false })
+    const { data: yData } = await supabase.from('yoklamalar').select('*').in('ders_id', dersIdleri).order('tarih', { ascending: false })
+
+    // 3. İlgili Öğrencilerin detaylarını çek
+    const ogrIdleri = new Set<string>()
+    nData?.forEach((n: any) => ogrIdleri.add(n.ogrenci_id))
+    yData?.forEach((y: any) => ogrIdleri.add(y.ogrenci_id))
+    
+    if (ogrIdleri.size > 0) {
+      const { data: ogrData } = await supabase.from('ogrenciler').select('id, numara, kullanici_id').in('id', Array.from(ogrIdleri))
+      const kullIdleri = ogrData?.map((o: any) => o.kullanici_id).filter(Boolean) || []
+      const { data: kullData } = await supabase.from('kullanicilar').select('id, ad, soyad').in('id', kullIdleri)
+
+      // Verileri birleştir (Zenginleştirme)
+      const zenginNotlar = (nData || []).map((n: any) => {
+        const ders = dersData?.find((d: any) => d.id === n.ders_id)
+        const ogrenci = ogrData?.find((o: any) => o.id === n.ogrenci_id)
+        const kullanici = kullData?.find((k: any) => k.id === ogrenci?.kullanici_id)
+        return {
+          ...n,
+          dersAd: ders?.ad || '-',
+          ogrenciNo: ogrenci?.numara || '-',
+          ogrenciAdSoyad: kullanici ? `${kullanici.ad} ${kullanici.soyad}` : 'Silinmiş Öğrenci'
+        }
+      })
+
+      const zenginYoklamalar = (yData || []).map((y: any) => {
+        const ders = dersData?.find((d: any) => d.id === y.ders_id)
+        const ogrenci = ogrData?.find((o: any) => o.id === y.ogrenci_id)
+        const kullanici = kullData?.find((k: any) => k.id === ogrenci?.kullanici_id)
+        return {
+          ...y,
+          dersAd: ders?.ad || '-',
+          ogrenciNo: ogrenci?.numara || '-',
+          ogrenciAdSoyad: kullanici ? `${kullanici.ad} ${kullanici.soyad}` : 'Silinmiş Öğrenci'
+        }
+      })
+
+      setGecmisNotlar(zenginNotlar)
+      setGecmisYoklamalar(zenginYoklamalar)
+    } else {
+      setGecmisNotlar([])
+      setGecmisYoklamalar([])
+    }
+    setGecmisYukleniyor(false)
+  }
+
+  // Duruma göre rozet renkleri
+  const durumRozet = (durum: string) => {
+    switch(durum) {
+      case 'katildi': return 'bg-green-100 text-green-700'
+      case 'katilmadi': return 'bg-red-100 text-red-700'
+      case 'gec': return 'bg-yellow-100 text-yellow-700'
+      case 'izinli': return 'bg-blue-100 text-blue-700'
+      default: return 'bg-gray-100 text-gray-700'
+    }
+  }
+
+  const durumEtiket = (durum: string) => {
+    switch(durum) {
+      case 'katildi': return 'Katıldı'
+      case 'katilmadi': return 'Katılmadı'
+      case 'gec': return 'Geç'
+      case 'izinli': return 'İzinli'
+      default: return durum
+    }
+  }
+
   if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
 
   return (
     <div>
       <div className="bg-white rounded-xl shadow-sm">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800">Sınıflar</h2>
-          <button
-            onClick={() => setModalAcik(true)}
-            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80"
-          >
-            + Sınıf Ekle
-          </button>
+          <h2 className="font-semibold text-gray-800">
+            {arsivGoster ? 'Arşivlenen Sınıflar' : 'Sınıflar'}
+          </h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setArsivGoster(!arsivGoster)}
+              className="text-xs border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50"
+            >
+              {arsivGoster ? 'Aktif Sınıflar' : 'Arşivlenenleri Gör'}
+            </button>
+            {!arsivGoster && (
+              <button
+                onClick={() => setModalAcik(true)}
+                className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80"
+              >
+                + Sınıf Ekle
+              </button>
+            )}
+          </div>
         </div>
 
         {siniflar.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
-            Henüz sınıf eklenmemiş
+            {arsivGoster ? 'Arşivlenmiş sınıf bulunmuyor.' : 'Henüz sınıf eklenmemiş veya tümü arşivlenmiş.'}
           </div>
           ) : (
           <div className="overflow-x-auto">
@@ -269,14 +417,47 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
               {siniflar.map((s) => (
                 <tr key={s.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm font-medium text-gray-800">{s.ad}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{s.donem}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500">{guncelDonem(s.donem)}</td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => sinifSil(s.id)}
-                      className="text-red-500 text-xs hover:text-red-700"
-                    >
-                      Sil
-                    </button>
+                    <div className="flex gap-3">
+                      {!arsivGoster ? (
+                        <>
+                          <button
+                            onClick={() => sinifArsivle(s.id)}
+                            className="text-blue-600 text-xs hover:text-blue-800"
+                          >
+                            Arşivle
+                          </button>
+                          <button
+                            onClick={() => sinifSil(s.id)}
+                            className="text-red-500 text-xs hover:text-red-700"
+                          >
+                            Sil
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => gecmisiIncele(s)}
+                            className="text-[#a53860] text-xs font-medium hover:underline"
+                          >
+                            Geçmişi İncele
+                          </button>
+                          <button
+                            onClick={() => sinifArsivdenCikar(s.id)}
+                            className="text-green-600 text-xs hover:text-green-800"
+                          >
+                            Çıkar
+                          </button>
+                          <button
+                            onClick={() => sinifSil(s.id)}
+                            className="text-red-500 text-xs hover:text-red-700"
+                          >
+                            Sil
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -286,6 +467,114 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
         )}
       </div>
 
+      {/* GEÇMİŞİ İNCELE MODAL'I */}
+      {gecmisModalAcik && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-overlay">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl h-[85vh] flex flex-col animate-modal">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="font-semibold text-gray-800 text-lg">
+                  {secilenArsivSinif?.ad} <span className="text-sm font-normal text-gray-500 ml-2">Arşiv Kayıtları</span>
+                </h3>
+              </div>
+              <button onClick={() => setGecmisModalAcik(false)} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
+            </div>
+            
+            {/* Modal Content */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {gecmisYukleniyor ? (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-gray-500">Kayıtlar toplanıyor...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Modal Sekmeleri */}
+                  <div className="px-6 flex gap-1 border-b shrink-0 bg-gray-50 pt-2">
+                    <button
+                      onClick={() => setGecmisSekme('notlar')}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
+                        gecmisSekme === 'notlar' ? 'border-[#344e41] text-[#344e41]' : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      Geçmiş Notlar ({gecmisNotlar.length})
+                    </button>
+                    <button
+                      onClick={() => setGecmisSekme('yoklamalar')}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
+                        gecmisSekme === 'yoklamalar' ? 'border-[#344e41] text-[#344e41]' : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      Geçmiş Yoklamalar ({gecmisYoklamalar.length})
+                    </button>
+                  </div>
+
+                  {/* Tablo Alanı */}
+                  <div className="flex-1 overflow-y-auto p-6 bg-white">
+                    {gecmisSekme === 'notlar' && (
+                      gecmisNotlar.length === 0 ? <p className="text-center text-gray-400 mt-10">Bu sınıfa ait girilmiş not bulunmuyor.</p> : (
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-gray-50 text-gray-500 sticky top-0">
+                            <tr>
+                              <th className="py-3 px-4 font-medium border-b">Tarih</th>
+                              <th className="py-3 px-4 font-medium border-b">Ders</th>
+                              <th className="py-3 px-4 font-medium border-b">Başlık</th>
+                              <th className="py-3 px-4 font-medium border-b">Öğrenci</th>
+                              <th className="py-3 px-4 font-medium border-b text-right">Puan</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {gecmisNotlar.map((n, idx) => (
+                              <tr key={idx} className="hover:bg-gray-50">
+                                <td className="py-3 px-4 text-gray-500">{new Date(n.tarih).toLocaleDateString('tr-TR')}</td>
+                                <td className="py-3 px-4">{n.dersAd}</td>
+                                <td className="py-3 px-4">{n.baslik}</td>
+                                <td className="py-3 px-4">#{n.ogrenciNo} {n.ogrenciAdSoyad}</td>
+                                <td className="py-3 px-4 text-right font-medium">{n.puan}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )
+                    )}
+
+                    {gecmisSekme === 'yoklamalar' && (
+                      gecmisYoklamalar.length === 0 ? <p className="text-center text-gray-400 mt-10">Bu sınıfa ait yoklama kaydı bulunmuyor.</p> : (
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-gray-50 text-gray-500 sticky top-0">
+                            <tr>
+                              <th className="py-3 px-4 font-medium border-b">Tarih</th>
+                              <th className="py-3 px-4 font-medium border-b">Ders</th>
+                              <th className="py-3 px-4 font-medium border-b">Öğrenci</th>
+                              <th className="py-3 px-4 font-medium border-b text-right">Durum</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {gecmisYoklamalar.map((y, idx) => (
+                              <tr key={idx} className="hover:bg-gray-50">
+                                <td className="py-3 px-4 text-gray-500">{new Date(y.tarih).toLocaleDateString('tr-TR')}</td>
+                                <td className="py-3 px-4">{y.dersAd}</td>
+                                <td className="py-3 px-4">#{y.ogrenciNo} {y.ogrenciAdSoyad}</td>
+                                <td className="py-3 px-4 text-right">
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${durumRozet(y.durum)}`}>
+                                    {durumEtiket(y.durum)}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* YENİ SINIF EKLE MODAL'I */}
       {modalAcik && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
           <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
@@ -332,6 +621,8 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
   )
 }
 
+
+
 // ===== ÖĞRENCİLER =====
 function OgrencilerSekme({ programId, supabase, tema }: { programId: string, supabase: any, tema: string }) {
   const [ogrenciler, setOgrenciler] = useState<any[]>([])
@@ -361,7 +652,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
     const { data: o } = sinifIdleri.length > 0
       ? await supabase.from('ogrenciler').select(`
           id, numara, aktif, kullanici_id,
-          kullanicilar (ad, soyad, email, telefon),
+          kullanicilar (ad, soyad, email, telefon, avatar_url),
           siniflar (ad),
           ders_sorumlulari (ders_id, dersler (ad))
         `).in('sinif_id', sinifIdleri).order('numara')
@@ -373,7 +664,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
       const ogrenciIdleri = o.map((og: any) => og.id)
       const { data: tumNotlar } = await supabase.from('notlar').select('ogrenci_id, puan').in('ogrenci_id', ogrenciIdleri)
       const { data: tumYoklamalar } = await supabase.from('yoklamalar').select('ogrenci_id, durum').in('ogrenci_id', ogrenciIdleri)
-      const devamPuanlari: Record<string, number> = { katildi: 100, gec: 75, izinli: 50, katilmadi: 0 }
+      const devamPuanlari: Record<string, number> = { katildi: 100, gec: 0, izinli: 0, katilmadi: 0 }
       const yeniOrtalamalar: Record<string, number | null> = {}
       for (const id of ogrenciIdleri) {
         const notlariBu = (tumNotlar || []).filter((n: any) => n.ogrenci_id === id)
@@ -383,7 +674,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
         if (sinavOrt === null && devamOrt === null) yeniOrtalamalar[id] = null
         else if (sinavOrt === null) yeniOrtalamalar[id] = devamOrt
         else if (devamOrt === null) yeniOrtalamalar[id] = sinavOrt
-        else yeniOrtalamalar[id] = sinavOrt * 0.7 + devamOrt * 0.3
+        else yeniOrtalamalar[id] = sinavOrt * 0.5 + devamOrt * 0.5
       }
       setOrtalamalar(yeniOrtalamalar)
     }
@@ -451,6 +742,34 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
   async function ogrenciAktifEt(ogrenci: any) {
     await supabase.from('ogrenciler').update({ aktif: true }).eq('id', ogrenci.id)
     yukle()
+  }
+
+  function ogrenciKaliciSil(ogrenci: any) {
+    toast(`${ogrenci.kullanicilar?.ad} ${ogrenci.kullanicilar?.soyad} KALICI olarak silinecek`, {
+      description: 'Bu işlem geri alınamaz! Tüm yoklama, not ve giriş bilgileri tamamen silinir.',
+      action: {
+        label: 'Kalıcı Sil',
+        onClick: async () => {
+          try {
+            const res = await fetch('/api/admin/ogrenci-sil', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ogrenciId: ogrenci.id, kullaniciId: ogrenci.kullanici_id })
+            })
+            const json = await res.json()
+            if (!res.ok) {
+              toast.error('Silinemedi: ' + (json?.error || `HTTP ${res.status}`))
+              return
+            }
+            toast.success('Öğrenci kalıcı olarak silindi')
+            yukle()
+          } catch (err: any) {
+            toast.error('Beklenmeyen hata: ' + (err?.message || err))
+          }
+        },
+      },
+      cancel: { label: 'Vazgeç', onClick: () => {} },
+    })
   }
 
   function sifreSifirlaAc(kullaniciId: string, ad: string) {
@@ -534,6 +853,15 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
                   <tr key={o.id} className={`hover:bg-gray-50/50 transition-colors ${!o.aktif ? 'opacity-50' : ''}`}>
                     <td className="px-6 py-4 text-xs text-gray-400 font-mono">#{o.numara}</td>
                     <td className="px-6 py-4">
+                      <div className="flex items-center gap-2.5">
+                        {o.kullanicilar?.avatar_url ? (
+                          <img src={o.kullanicilar.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-[10px] font-semibold shrink-0">
+                            {(o.kullanicilar?.ad?.[0] || '') + (o.kullanicilar?.soyad?.[0] || '')}
+                          </div>
+                        )}
+                        <div>
                       <p className="text-sm font-medium text-gray-900">{o.kullanicilar?.ad} {o.kullanicilar?.soyad}</p>
                       {o.ders_sorumlulari?.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
@@ -542,6 +870,8 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
                           ))}
                         </div>
                       )}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-6 py-4 hidden md:table-cell">
                       <p className="text-sm text-gray-400">{o.kullanicilar?.email}</p>
@@ -564,7 +894,10 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
                             <button onClick={() => ogrenciSil(o)} className={ui.btnDanger}>Pasife Al</button>
                           </>
                         ) : (
-                          <button onClick={() => ogrenciAktifEt(o)} className="text-green-600 text-xs hover:text-green-800">Aktif Et</button>
+                          <>
+                            <button onClick={() => ogrenciAktifEt(o)} className="text-green-600 text-xs hover:text-green-800">Aktif Et</button>
+                            <button onClick={() => ogrenciKaliciSil(o)} className={ui.btnDanger}>Kalıcı Sil</button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -1887,6 +2220,381 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
         </div>
       )}
     </div>
+  )
+}
+
+// ===== ÖDEVLER =====
+function OdevlerSekmesi({ programId, supabase }: { programId: string, supabase: any }) {
+  const [siniflar, setSiniflar] = useState<any[]>([])
+  const [dersler, setDersler] = useState<any[]>([])
+  const [odevler, setOdevler] = useState<any[]>([])
+  const [secilenSinif, setSecilenSinif] = useState<any>(null)
+  const [secilenDers, setSecilenDers] = useState<any>(null)
+  const [yukleniyor, setYukleniyor] = useState(true)
+  const [kaydediyor, setKaydediyor] = useState(false)
+  const [odevModalAcik, setOdevModalAcik] = useState(false)
+  const [teslimModalAcik, setTeslimModalAcik] = useState(false)
+  const [aktifOdev, setAktifOdev] = useState<any>(null)
+  const [teslimler, setTeslimler] = useState<any[]>([])
+  const [teslimYukleniyor, setTeslimYukleniyor] = useState(false)
+  const [puanlar, setPuanlar] = useState<Record<string, string>>({})
+  const [odevForm, setOdevForm] = useState({ baslik: '', tur: 'kitap_muzakeresi', donem: '', son_teslim_tarihi: '', aciklama: '' })
+  const [kullaniciId, setKullaniciId] = useState<string>('')
+
+  async function siniflarıYukle() {
+    if (!programId) return
+    const { data } = await supabase.from('siniflar').select('*').eq('program_id', programId).order('ad')
+    setSiniflar(data || [])
+    if (data && data.length > 0) setSecilenSinif(data[0])
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) setKullaniciId(user.id)
+
+    setYukleniyor(false)
+  }
+
+  async function dersleriYukle(sinifId: string) {
+    const { data } = await supabase.from('dersler').select('*').eq('sinif_id', sinifId).order('ad')
+    setDersler(data || [])
+    setSecilenDers(data?.[0] || null)
+  }
+
+  async function odevleriYukle(dersId: string) {
+    const { data } = await supabase
+      .from('odevler')
+      .select('*')
+      .eq('ders_id', dersId)
+      .order('son_teslim_tarihi', { ascending: false })
+    setOdevler(data || [])
+  }
+
+  useEffect(() => { siniflarıYukle() }, [programId])
+  useEffect(() => {
+    if (secilenSinif) { dersleriYukle(secilenSinif.id) }
+  }, [secilenSinif])
+  useEffect(() => {
+    if (secilenDers) { odevleriYukle(secilenDers.id) }
+  }, [secilenDers])
+
+  async function odevEkle() {
+    if (!odevForm.baslik || !odevForm.donem) { toast('Başlık ve dönem zorunlu!'); return }
+    if (!secilenDers) { toast('Önce bir ders seç!'); return }
+    setKaydediyor(true)
+
+    const { error } = await supabase.from('odevler').insert({
+      program_id: programId,
+      ders_id: secilenDers.id,
+      baslik: odevForm.baslik,
+      tur: odevForm.tur,
+      donem: odevForm.donem,
+      son_teslim_tarihi: odevForm.son_teslim_tarihi || null,
+      aciklama: odevForm.aciklama || null,
+      olusturan_id: kullaniciId
+    })
+
+    if (error) {
+      toast.error('Ödev eklenemedi: ' + error.message)
+      setKaydediyor(false)
+      return
+    }
+
+    const turAdi = odevForm.tur === 'kitap_muzakeresi' ? 'Kitap Müzakeresi' : odevForm.tur === 'makale' ? 'Makale' : 'Ödev'
+    const duyuruIcerik = `${secilenDers.ad} dersi için ${turAdi.toLowerCase()} duyurusu:\n\nBaşlık: ${odevForm.baslik}\nDönem: ${odevForm.donem}${odevForm.son_teslim_tarihi ? '\nSon Teslim: ' + new Date(odevForm.son_teslim_tarihi).toLocaleDateString('tr-TR') : ''}${odevForm.aciklama ? '\n\nAçıklama: ' + odevForm.aciklama : ''}`
+
+    await supabase.from('duyurular').insert({
+      program_id: programId,
+      baslik: `${turAdi} Duyurusu: ${odevForm.baslik}`,
+      icerik: duyuruIcerik,
+      yayinlayan_id: kullaniciId
+    })
+
+    setOdevForm({ baslik: '', tur: 'kitap_muzakeresi', donem: '', son_teslim_tarihi: '', aciklama: '' })
+    setOdevModalAcik(false)
+    setKaydediyor(false)
+    odevleriYukle(secilenDers.id)
+    toast.success('Ödev eklendi ve duyuru yapıldı!')
+  }
+
+  async function teslimleriAc(odev: any) {
+    setAktifOdev(odev)
+    setTeslimModalAcik(true)
+    setTeslimYukleniyor(true)
+
+    const { data: teslimData } = await supabase
+      .from('odev_teslimleri')
+      .select('*')
+      .eq('odev_id', odev.id)
+      .order('teslim_tarihi', { ascending: false })
+
+    if (teslimData && teslimData.length > 0) {
+      const ogrenciIds = [...new Set(teslimData.map((t: any) => t.ogrenci_id))]
+      const { data: ogr } = await supabase.from('ogrenciler').select('id, numara, kullanici_id').in('id', ogrenciIds)
+      const kullaniciIds = [...new Set((ogr || []).map((o: any) => o.kullanici_id))]
+      const { data: kull } = await supabase.from('kullanicilar').select('id, ad, soyad').in('id', kullaniciIds)
+
+      const { data: notData } = await supabase
+        .from('notlar')
+        .select('*')
+        .eq('odev_id', odev.id)
+
+      const zenginTeslim = teslimData.map((t: any) => {
+        const ogrenci = ogr?.find((o: any) => o.id === t.ogrenci_id)
+        const kullanici = kull?.find((k: any) => k.id === ogrenci?.kullanici_id)
+        const mevcutNot = notData?.find((n: any) => n.ogrenci_id === t.ogrenci_id)
+        return {
+          ...t,
+          ogrenciAdi: `${kullanici?.ad || ''} ${kullanici?.soyad || ''}`,
+          ogrenciNo: ogrenci?.numara,
+          mevcutPuan: mevcutNot?.puan
+        }
+      })
+      setTeslimler(zenginTeslim)
+
+      const baslangicPuanlar: Record<string, string> = {}
+      zenginTeslim.forEach((t: any) => {
+        if (t.mevcutPuan !== undefined) baslangicPuanlar[t.ogrenci_id] = String(t.mevcutPuan)
+      })
+      setPuanlar(baslangicPuanlar)
+    } else {
+      setTeslimler([])
+    }
+    setTeslimYukleniyor(false)
+  }
+
+  async function notuKaydet(ogrenciId: string, dersId: string) {
+    const puan = puanlar[ogrenciId]
+    if (!puan) { toast('Önce bir puan gir!'); return }
+
+    const { data: mevcut } = await supabase
+      .from('notlar')
+      .select('id')
+      .eq('ogrenci_id', ogrenciId)
+      .eq('odev_id', aktifOdev.id)
+      .maybeSingle()
+
+    if (mevcut) {
+      await supabase.from('notlar').update({ puan: parseFloat(puan) }).eq('id', mevcut.id)
+    } else {
+      await supabase.from('notlar').insert({
+        ogrenci_id: ogrenciId,
+        ders_id: dersId,
+        odev_id: aktifOdev.id,
+        baslik: aktifOdev.baslik,
+        puan: parseFloat(puan),
+        tarih: aktifOdev.son_teslim_tarihi || new Date().toISOString().slice(0, 10)
+      })
+    }
+    toast.success('Not kaydedildi!')
+  }
+
+  function odevSil(id: string) {
+    toast('Bu ödev silinecek', {
+      description: 'Bu işlem geri alınamaz.',
+      action: {
+        label: 'Sil',
+        onClick: async () => {
+          const { error } = await supabase.from('odevler').delete().eq('id', id)
+          if (error) { toast.error('Silinemedi: ' + error.message); return }
+          toast.success('Ödev silindi')
+          odevleriYukle(secilenDers.id)
+        },
+      },
+      cancel: { label: 'Vazgeç', onClick: () => {} },
+    })
+  }
+
+  if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
+
+  return (
+    <div className="space-y-4">
+      {/* Filtreler */}
+      <div className="bg-white rounded-xl shadow-sm p-4 flex flex-wrap gap-4">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Sınıf</label>
+          <select value={secilenSinif?.id || ''} onChange={(e) => setSecilenSinif(siniflar.find(s => s.id === e.target.value))}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+            {siniflar.map(s => <option key={s.id} value={s.id}>{s.ad}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Ders</label>
+          <select value={secilenDers?.id || ''} onChange={(e) => setSecilenDers(dersler.find(d => d.id === e.target.value))}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+            {dersler.map(d => <option key={d.id} value={d.id}>{d.ad}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="font-semibold text-gray-800">Ödevler {secilenDers ? `— ${secilenDers.ad}` : ''}</h2>
+          <button onClick={() => setOdevModalAcik(true)} disabled={!secilenDers}
+            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
+            + Ödev Ekle
+          </button>
+        </div>
+        {!secilenDers ? (
+          <div className="p-8 text-center text-gray-400">Önce bir ders seç</div>
+        ) : odevler.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">Henüz ödev eklenmemiş</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {odevler.map((o) => (
+              <div key={o.id} className="p-4 flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <p className="font-medium text-gray-800">{o.baslik}</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {o.tur === 'kitap_muzakeresi' ? 'Kitap Müzakeresi' : o.tur === 'makale' ? 'Makale' : 'Diğer'} · {o.donem}
+                  </p>
+                  {o.son_teslim_tarihi && (
+                    <p className={`text-xs mt-1 ${new Date(o.son_teslim_tarihi) < new Date() ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                      {new Date(o.son_teslim_tarihi) < new Date() ? '⚠ Süresi geçti — ' : ''}
+                      Son teslim: {new Date(o.son_teslim_tarihi).toLocaleDateString('tr-TR')}
+                    </p>
+                  )}
+                  {o.aciklama && <p className="text-sm text-gray-400 mt-1">{o.aciklama}</p>}
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <button onClick={() => teslimleriAc(o)}
+                    className="text-primary text-sm hover:underline">
+                    Teslimler
+                  </button>
+                  <button onClick={() => odevSil(o.id)}
+                    className="text-red-500 text-sm hover:text-red-700">
+                    Sil
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {odevModalAcik && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
+            <h3 className="font-semibold text-gray-800 mb-4">Ödev Ekle — {secilenDers?.ad}</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Başlık</label>
+                <input value={odevForm.baslik} onChange={(e) => setOdevForm({...odevForm, baslik: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                  placeholder="örn: Siyer Kitabı Müzakeresi" />
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-600 mb-1">Tür</label>
+                  <select value={odevForm.tur} onChange={(e) => setOdevForm({...odevForm, tur: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+                    <option value="kitap_muzakeresi">Kitap Müzakeresi</option>
+                    <option value="makale">Makale</option>
+                    <option value="diger">Diğer</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-600 mb-1">Dönem</label>
+                  <input value={odevForm.donem} onChange={(e) => setOdevForm({...odevForm, donem: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                    placeholder="örn: 2025-2026 Güz" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Son Teslim Tarihi (isteğe bağlı)</label>
+                <input type="date" value={odevForm.son_teslim_tarihi} onChange={(e) => setOdevForm({...odevForm, son_teslim_tarihi: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Açıklama (isteğe bağlı)</label>
+                <textarea value={odevForm.aciklama} onChange={(e) => setOdevForm({...odevForm, aciklama: e.target.value})}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none"
+                  placeholder="Ödev hakkında ek bilgi..." />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setOdevModalAcik(false)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
+                İptal
+              </button>
+              <button onClick={odevEkle} disabled={kaydediyor}
+                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
+                {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {teslimModalAcik && (
+  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
+    <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto animate-modal">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-semibold">{aktifOdev?.baslik} — Teslimler</h3>
+        <button onClick={() => setTeslimModalAcik(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+      </div>
+
+      {teslimYukleniyor ? (
+        <p className="text-gray-500">Yükleniyor...</p>
+      ) : teslimler.length === 0 ? (
+        <p className="text-gray-500">Henüz teslim yok.</p>
+      ) : (
+        <div className="space-y-4">
+          {teslimler.map((t) => (
+            <div key={t.ogrenci_id} className="border rounded-lg p-4">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <p className="font-medium">{t.ogrenciAdi}</p>
+                  <p className="text-sm text-gray-500">No: {t.ogrenciNo}</p>
+                </div>
+                <p className="text-sm text-gray-500">
+                  {new Date(t.teslim_tarihi).toLocaleDateString('tr-TR')}
+                </p>
+              </div>
+
+              <details className="mb-3">
+                <summary className="cursor-pointer text-sm text-[#344e41]">Metni görüntüle</summary>
+                <div
+                  className="prose prose-sm max-w-none mt-2 border-t pt-2"
+                  dangerouslySetInnerHTML={{ __html: t.icerik_html || '' }}
+                />
+              </details>
+
+              
+              <a
+                href={`/api/odev-export-docx?id=${t.id}`}
+                className="text-sm text-[#344e41] hover:underline mb-3 inline-block"
+              >
+                Dosyayı indir (.docx)
+              </a>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  className="border rounded px-2 py-1 w-24"
+                  placeholder="Puan"
+                  value={puanlar[t.ogrenci_id] || ''}
+                  onChange={(e) =>
+                    setPuanlar((prev) => ({ ...prev, [t.ogrenci_id]: e.target.value }))
+                  }
+                />
+                <button
+                  onClick={() => notuKaydet(t.ogrenci_id, t.ders_id)}
+                  className="bg-[#344e41] text-white rounded px-3 py-1 text-sm hover:bg-[#344e41]"
+                >
+                  Kaydet
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
+    </div>
+
+    
   )
 }
 

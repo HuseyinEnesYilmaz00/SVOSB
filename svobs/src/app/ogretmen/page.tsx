@@ -82,6 +82,7 @@ export default function OgretmenPage() {
   const sekmeler = [
     { id: 'yoklama', ad: 'Yoklama' },
     { id: 'notlar', ad: 'Notlar' },
+    { id: 'odevler', ad: 'Ödevler' },
     { id: 'duyurular', ad: 'Duyurular' },
   ]
 
@@ -165,6 +166,16 @@ export default function OgretmenPage() {
               />
             )}
 
+            {aktifSekme === 'odevler' && secilenDers && (
+              <OgretmenOdevler
+                dersId={secilenDers.ders_id}
+                sinifId={secilenDers.dersler?.siniflar?.id}
+                dersAd={secilenDers.dersler?.ad}
+                supabase={supabase}
+                kullanici={kullanici}
+              />
+            )}
+
             {aktifSekme === 'duyurular' && secilenDers && (
               <OgretmenDuyurular
                 dersId={secilenDers.ders_id}
@@ -203,7 +214,7 @@ function OgretmenYoklama({ dersId, sinifId, supabase, kullanici }: any) {
         const kullaniciIdleri = ogr.map((o: any) => o.kullanici_id)
         const { data: kull } = await supabase
           .from('kullanicilar')
-          .select('id, ad, soyad')
+          .select('id, ad, soyad, avatar_url')
           .in('id', kullaniciIdleri)
 
         const birlesik = ogr.map((o: any) => ({
@@ -275,7 +286,14 @@ function OgretmenYoklama({ dersId, sinifId, supabase, kullanici }: any) {
       <div className="divide-y divide-gray-100">
         {ogrenciler.map((o) => (
           <div key={o.id} className="px-4 py-3 flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-800">
+            <span className="text-sm font-medium text-gray-800 flex items-center gap-2">
+              {o.kullanicilar?.avatar_url ? (
+                <img src={o.kullanicilar.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+              ) : (
+                <span className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-[9px] font-semibold">
+                  {(o.kullanicilar?.ad?.[0] || '') + (o.kullanicilar?.soyad?.[0] || '')}
+                </span>
+              )}
               #{o.numara} {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
               {mevcutYoklamalar.find(y => y.ogrenci_id === o.id) && (
                 <span className="ml-2 text-xs text-gray-400">kaydedildi</span>
@@ -687,6 +705,339 @@ function OgretmenDuyurular({ dersId, sinifId, supabase, kullanici }: any) {
                 {kaydediyor ? 'Yayınlanıyor...' : 'Yayınla'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+// ===== ÖDEVLER (Hoca) =====
+function OgretmenOdevler({ dersId, sinifId, dersAd, supabase, kullanici }: any) {
+  const [odevler, setOdevler] = useState<any[]>([])
+  const [yukleniyor, setYukleniyor] = useState(true)
+  const [kaydediyor, setKaydediyor] = useState(false)
+  const [odevModalAcik, setOdevModalAcik] = useState(false)
+  const [teslimModalAcik, setTeslimModalAcik] = useState(false)
+  const [aktifOdev, setAktifOdev] = useState<any>(null)
+  const [teslimler, setTeslimler] = useState<any[]>([])
+  const [teslimYukleniyor, setTeslimYukleniyor] = useState(false)
+  const [puanlar, setPuanlar] = useState<Record<string, string>>({})
+  const [programId, setProgramId] = useState<string>('')
+  const [odevForm, setOdevForm] = useState({ baslik: '', tur: 'kitap_muzakeresi', donem: '', son_teslim_tarihi: '', aciklama: '' })
+
+  useEffect(() => {
+    async function yukle() {
+      if (!sinifId) return
+      const { data: sinif } = await supabase.from('siniflar').select('program_id').eq('id', sinifId).single()
+      if (sinif) setProgramId(sinif.program_id)
+    }
+    yukle()
+  }, [sinifId])
+
+  async function odevleriYukle() {
+    if (!dersId) return
+    const { data } = await supabase
+      .from('odevler')
+      .select('*')
+      .eq('ders_id', dersId)
+      .order('son_teslim_tarihi', { ascending: false })
+    setOdevler(data || [])
+    setYukleniyor(false)
+  }
+
+  useEffect(() => { odevleriYukle() }, [dersId])
+
+  async function odevEkle() {
+    if (!odevForm.baslik || !odevForm.donem) { toast('Başlık ve dönem zorunlu!'); return }
+    setKaydediyor(true)
+
+    const { error } = await supabase.from('odevler').insert({
+      program_id: programId,
+      ders_id: dersId,
+      baslik: odevForm.baslik,
+      tur: odevForm.tur,
+      donem: odevForm.donem,
+      son_teslim_tarihi: odevForm.son_teslim_tarihi || null,
+      aciklama: odevForm.aciklama || null,
+      olusturan_id: kullanici.id
+    })
+
+    if (error) {
+      toast.error('Ödev eklenemedi: ' + error.message)
+      setKaydediyor(false)
+      return
+    }
+
+    const turAdi = odevForm.tur === 'kitap_muzakeresi' ? 'Kitap Müzakeresi' : odevForm.tur === 'makale' ? 'Makale' : 'Ödev'
+    const duyuruIcerik = `${dersAd} dersi için ${turAdi.toLowerCase()} duyurusu:\n\nBaşlık: ${odevForm.baslik}\nDönem: ${odevForm.donem}${odevForm.son_teslim_tarihi ? '\nSon Teslim: ' + new Date(odevForm.son_teslim_tarihi).toLocaleDateString('tr-TR') : ''}${odevForm.aciklama ? '\n\nAçıklama: ' + odevForm.aciklama : ''}`
+
+    if (programId) {
+      await supabase.from('duyurular').insert({
+        program_id: programId,
+        baslik: `${turAdi} Duyurusu: ${odevForm.baslik}`,
+        icerik: duyuruIcerik,
+        yayinlayan_id: kullanici.id
+      })
+    }
+
+    setOdevForm({ baslik: '', tur: 'kitap_muzakeresi', donem: '', son_teslim_tarihi: '', aciklama: '' })
+    setOdevModalAcik(false)
+    setKaydediyor(false)
+    odevleriYukle()
+    toast.success('Ödev eklendi ve duyuru yapıldı!')
+  }
+
+  async function teslimleriAc(odev: any) {
+    setAktifOdev(odev)
+    setTeslimModalAcik(true)
+    setTeslimYukleniyor(true)
+
+    const { data: teslimData } = await supabase
+      .from('odev_teslimleri')
+      .select('*')
+      .eq('odev_id', odev.id)
+      .order('teslim_tarihi', { ascending: false })
+
+    if (teslimData && teslimData.length > 0) {
+      const ogrenciIds = [...new Set(teslimData.map((t: any) => t.ogrenci_id))]
+      const { data: ogr } = await supabase.from('ogrenciler').select('id, numara, kullanici_id').in('id', ogrenciIds)
+      const kullaniciIds = [...new Set((ogr || []).map((o: any) => o.kullanici_id))]
+      const { data: kull } = await supabase.from('kullanicilar').select('id, ad, soyad').in('id', kullaniciIds)
+
+      const { data: notData } = await supabase
+        .from('notlar')
+        .select('*')
+        .eq('odev_id', odev.id)
+
+      const zenginTeslim = teslimData.map((t: any) => {
+        const ogrenci = ogr?.find((o: any) => o.id === t.ogrenci_id)
+        const kullanici2 = kull?.find((k: any) => k.id === ogrenci?.kullanici_id)
+        const mevcutNot = notData?.find((n: any) => n.ogrenci_id === t.ogrenci_id)
+        return {
+          ...t,
+          ogrenciAdi: `${kullanici2?.ad || ''} ${kullanici2?.soyad || ''}`,
+          ogrenciNo: ogrenci?.numara,
+          mevcutPuan: mevcutNot?.puan
+        }
+      })
+      setTeslimler(zenginTeslim)
+
+      const baslangicPuanlar: Record<string, string> = {}
+      zenginTeslim.forEach((t: any) => {
+        if (t.mevcutPuan !== undefined) baslangicPuanlar[t.ogrenci_id] = String(t.mevcutPuan)
+      })
+      setPuanlar(baslangicPuanlar)
+    } else {
+      setTeslimler([])
+    }
+    setTeslimYukleniyor(false)
+  }
+
+  async function notuKaydet(ogrenciId: string) {
+    const puan = puanlar[ogrenciId]
+    if (!puan) { toast('Önce bir puan gir!'); return }
+
+    const { data: mevcut } = await supabase
+      .from('notlar')
+      .select('id')
+      .eq('ogrenci_id', ogrenciId)
+      .eq('odev_id', aktifOdev.id)
+      .maybeSingle()
+
+    if (mevcut) {
+      await supabase.from('notlar').update({ puan: parseFloat(puan) }).eq('id', mevcut.id)
+    } else {
+      await supabase.from('notlar').insert({
+        ogrenci_id: ogrenciId,
+        ders_id: dersId,
+        odev_id: aktifOdev.id,
+        baslik: aktifOdev.baslik,
+        puan: parseFloat(puan),
+        tarih: aktifOdev.son_teslim_tarihi || new Date().toISOString().slice(0, 10)
+      })
+    }
+    toast.success('Not kaydedildi!')
+  }
+
+  function odevSil(id: string) {
+    toast('Bu ödev silinecek', {
+      description: 'Bu işlem geri alınamaz.',
+      action: {
+        label: 'Sil',
+        onClick: async () => {
+          const { error } = await supabase.from('odevler').delete().eq('id', id)
+          if (error) { toast.error('Silinemedi: ' + error.message); return }
+          toast.success('Ödev silindi')
+          odevleriYukle()
+        },
+      },
+      cancel: { label: 'Vazgeç', onClick: () => {} },
+    })
+  }
+
+  if (yukleniyor) return <p className="text-gray-500 max-w-6xl mx-auto mt-6">Yükleniyor...</p>
+
+  return (
+    <div className="max-w-6xl mx-auto mt-6 space-y-4">
+      <div className="bg-white rounded-xl shadow-sm">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="font-semibold text-gray-800">Ödevler — {dersAd}</h2>
+          <button onClick={() => setOdevModalAcik(true)}
+            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80">
+            + Ödev Ekle
+          </button>
+        </div>
+        {odevler.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">Henüz ödev eklenmemiş</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {odevler.map((o) => (
+              <div key={o.id} className="p-4 flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <p className="font-medium text-gray-800">{o.baslik}</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {o.tur === 'kitap_muzakeresi' ? 'Kitap Müzakeresi' : o.tur === 'makale' ? 'Makale' : 'Diğer'} · {o.donem}
+                  </p>
+                  {o.son_teslim_tarihi && (
+                    <p className={`text-xs mt-1 ${new Date(o.son_teslim_tarihi) < new Date() ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                      {new Date(o.son_teslim_tarihi) < new Date() ? '⚠ Süresi geçti — ' : ''}
+                      Son teslim: {new Date(o.son_teslim_tarihi).toLocaleDateString('tr-TR')}
+                    </p>
+                  )}
+                  {o.aciklama && <p className="text-sm text-gray-400 mt-1">{o.aciklama}</p>}
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <button onClick={() => teslimleriAc(o)} className="text-primary text-sm hover:underline">
+                    Teslimler
+                  </button>
+                  <button onClick={() => odevSil(o.id)} className="text-red-500 text-sm hover:text-red-700">
+                    Sil
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {odevModalAcik && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
+            <h3 className="font-semibold text-gray-800 mb-4">Ödev Ekle — {dersAd}</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Başlık</label>
+                <input value={odevForm.baslik} onChange={(e) => setOdevForm({...odevForm, baslik: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                  placeholder="örn: Siyer Kitabı Müzakeresi" />
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-600 mb-1">Tür</label>
+                  <select value={odevForm.tur} onChange={(e) => setOdevForm({...odevForm, tur: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+                    <option value="kitap_muzakeresi">Kitap Müzakeresi</option>
+                    <option value="makale">Makale</option>
+                    <option value="diger">Diğer</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-600 mb-1">Dönem</label>
+                  <input value={odevForm.donem} onChange={(e) => setOdevForm({...odevForm, donem: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                    placeholder="örn: 2025-2026 Güz" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Son Teslim Tarihi (isteğe bağlı)</label>
+                <input type="date" value={odevForm.son_teslim_tarihi} onChange={(e) => setOdevForm({...odevForm, son_teslim_tarihi: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Açıklama (isteğe bağlı)</label>
+                <textarea value={odevForm.aciklama} onChange={(e) => setOdevForm({...odevForm, aciklama: e.target.value})}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none"
+                  placeholder="Ödev hakkında ek bilgi..." />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setOdevModalAcik(false)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
+                İptal
+              </button>
+              <button onClick={odevEkle} disabled={kaydediyor}
+                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
+                {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {teslimModalAcik && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
+          <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto animate-modal">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">{aktifOdev?.baslik} — Teslimler</h3>
+              <button onClick={() => setTeslimModalAcik(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+
+            {teslimYukleniyor ? (
+              <p className="text-gray-500">Yükleniyor...</p>
+            ) : teslimler.length === 0 ? (
+              <p className="text-gray-500">Henüz teslim yok.</p>
+            ) : (
+              <div className="space-y-4">
+                {teslimler.map((t) => (
+                  <div key={t.ogrenci_id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <p className="font-medium">{t.ogrenciAdi}</p>
+                        <p className="text-sm text-gray-500">No: {t.ogrenciNo}</p>
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        {new Date(t.teslim_tarihi).toLocaleDateString('tr-TR')}
+                      </p>
+                    </div>
+
+                    <details className="mb-3">
+                      <summary className="cursor-pointer text-sm text-[#344e41]">Metni görüntüle</summary>
+                      <div
+                        className="prose prose-sm max-w-none mt-2 border-t pt-2"
+                        dangerouslySetInnerHTML={{ __html: t.icerik_html || '' }}
+                      />
+                    </details>
+
+                    
+                      <a
+                      href={`/api/odev-export-docx?id=${t.id}`}
+                      className="text-sm text-[#344e41] hover:underline mb-3 inline-block"
+                    >
+                      Dosyayı indir (.docx)
+                    </a>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        className="border rounded px-2 py-1 w-24"
+                        placeholder="Puan"
+                        value={puanlar[t.ogrenci_id] || ''}
+                        onChange={(e) =>
+                          setPuanlar((prev) => ({ ...prev, [t.ogrenci_id]: e.target.value }))
+                        }
+                      />
+                      <button
+                        onClick={() => notuKaydet(t.ogrenci_id)}
+                        className="bg-[#344e41] text-white rounded px-3 py-1 text-sm hover:bg-[#344e41]"
+                      >
+                        Kaydet
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
