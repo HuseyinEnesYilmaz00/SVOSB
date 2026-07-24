@@ -95,25 +95,31 @@ export default function AdminPage() {
 
   return (
   <div className={`tema-${tema} min-h-svh bg-background`}>
-      <header className="border-b bg-card px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <img src="/sv-logo.png" alt="Siyer Vakfı" className="w-8 h-8 object-contain brightness-0" />
-          <div>
-            <p className="font-semibold text-sm text-foreground">Siyer Vakfı</p>
-            <p className="text-xs text-muted-foreground">Yönetim Paneli</p>
+      <header className="border-b bg-card px-3 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center justify-between sm:justify-start gap-3">
+          <div className="flex items-center gap-3">
+            <img src="/sv-logo.png" alt="Siyer Vakfı" className="w-8 h-8 object-contain brightness-0 shrink-0" />
+            <div>
+              <p className="font-semibold text-sm text-foreground">Siyer Vakfı</p>
+              <p className="text-xs text-muted-foreground">Yönetim Paneli</p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
+          <div className="text-right sm:hidden">
             <p className="text-sm font-medium text-foreground">{kullanici?.ad} {kullanici?.soyad}</p>
             <p className="text-xs text-muted-foreground">{kullanici?.rol === 'super_admin' ? 'Süper Admin' : 'Program Yöneticisi'}</p>
           </div>
-          <div className="flex gap-2">
-          <ExportButton izinliProgramIdler={aktifProgram ? [aktifProgram.id] : []} />
-          <a href="/sifre-degistir">
-          <Button variant="outline" size="sm">Şifre</Button>
-          </a>
-          <Button variant="outline" size="sm" onClick={cikisYap}>Çıkış</Button>
+        </div>
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="text-right hidden sm:block">
+            <p className="text-sm font-medium text-foreground">{kullanici?.ad} {kullanici?.soyad}</p>
+            <p className="text-xs text-muted-foreground">{kullanici?.rol === 'super_admin' ? 'Süper Admin' : 'Program Yöneticisi'}</p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <ExportButton izinliProgramIdler={aktifProgram ? [aktifProgram.id] : []} />
+            <a href="/sifre-degistir">
+              <Button variant="outline" size="sm">Şifre</Button>
+            </a>
+            <Button variant="outline" size="sm" onClick={cikisYap}>Çıkış</Button>
           </div>
         </div>
       </header>
