@@ -11,16 +11,37 @@ import ExportButton from '@/components/ui/ExportButton'; // kendi path'ine göre
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { motion } from "framer-motion"
+import { FloatingDock, DockItem } from "@/components/FloatingDock"
+import { Users, BookOpen, CalendarCheck, FileCheck, MoreHorizontal, X, GraduationCap, FileText, Bell, Award, LayoutDashboard } from "lucide-react"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { guncelDonem, guncelAkademikDonem } from '@/lib/donem'
 
 
+
+
+const ADMIN_ANA_SEKMELER: DockItem[] = [
+  { id: "ogrenciler", ad: "Öğrenciler", ikon: Users },
+  { id: "dersler", ad: "Dersler", ikon: BookOpen },
+  { id: "yoklama", ad: "Devam", ikon: CalendarCheck },
+  { id: "odevler", ad: "Ödevler", ikon: FileCheck },
+  { id: "diger", ad: "Diğer", ikon: MoreHorizontal },
+];
+
+const DIGER_SEKMELER = [
+  { id: "siniflar", ad: "Sınıflar", ikon: GraduationCap },
+  { id: "notlar", ad: "Notlar", ikon: FileText },
+  { id: "duyurular", ad: "Duyurular", ikon: Bell },
+  { id: "hocalar", ad: "Hocalar", ikon: Award },
+  { id: "genelbakis", ad: "Genel Bakış", ikon: LayoutDashboard },
+];
 
 export default function AdminPage() {
   const [kullanici, setKullanici] = useState<any>(null)
   const [programlar, setProgramlar] = useState<any[]>([])
   const [aktifProgram, setAktifProgram] = useState<any>(null)
   const [aktifSekme, setAktifSekme] = useState('ogrenciler')
+  const [digerAcik, setDigerAcik] = useState(false)
   const [yukleniyor, setYukleniyor] = useState(true)
   const router = useRouter()
   const supabase = createClient()
@@ -121,79 +142,181 @@ export default function AdminPage() {
             </a>
             <Button variant="outline" size="sm" onClick={cikisYap}>Çıkış</Button>
           </div>
-        </div>
+                </div>
       </header>
 
-      <div className="border-b bg-card px-6 py-2 flex gap-2">
-        {programlar.map((p) => {
-          const pTema = programTema(p.ad)
-          const aktif = aktifProgram?.id === p.id
-          return (
-            <button
-              key={p.id}
-              onClick={() => setAktifProgram(p)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
-                aktif
-                  ? pTema === 'esma' ? 'bg-[#a53860] text-white' : 'bg-[#344e41] text-white'
-                  : 'border border-border text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              {p.ad}
-            </button>
-          )
-        })}
-      </div>
+      {/* Program Seçici Hap Butonlar */}
+      {programlar.length > 1 && (
+        <div className="border-b bg-card/60 backdrop-blur-sm px-6 py-2.5 flex gap-2 overflow-x-auto">
+          {programlar.map((p) => {
+            const aktif = aktifProgram?.id === p.id;
+            return (
+              <button
+                key={p.id}
+                onClick={() => setAktifProgram(p)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition cursor-pointer whitespace-nowrap ${
+                  aktif
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "border border-border/70 text-muted-foreground hover:bg-muted/60"
+                }`}
+              >
+                {p.ad}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-      <div className="border-b bg-card px-6 flex gap-1 overflow-x-auto">
-        {sekmeler.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => setAktifSekme(s.id)}
-            className={`px-4 py-3 text-sm whitespace-nowrap border-b-2 transition ${
-              aktifSekme === s.id
-                ? tema === 'esma'
-                  ? 'border-[#a53860] text-[#a53860] font-medium'
-                  : 'border-[#344e41] text-[#344e41] font-medium'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {s.ad}
-          </button>
-        ))}
-      </div>
-
-      <main className="p-4 md:p-6 max-w-6xl mx-auto">
-        {aktifSekme === 'ogrenciler' && (
+      {/* Ana Sekme İçerikleri */}
+      <main className="p-4 sm:p-6 max-w-7xl mx-auto pb-32">
+        {aktifSekme === "ogrenciler" && (
           <OgrencilerSekme programId={aktifProgram?.id} supabase={supabase} tema={tema} />
         )}
-        {aktifSekme === 'siniflar' && (
+        {aktifSekme === "siniflar" && (
           <SiniflarSekme programId={aktifProgram?.id} supabase={supabase} />
         )}
-        {aktifSekme === 'dersler' && (
+        {aktifSekme === "dersler" && (
           <DerslerSekme programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
         )}
-        {aktifSekme === 'yoklama' && (
+        {aktifSekme === "yoklama" && (
           <YoklamaSekmesi programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
         )}
-        {aktifSekme === 'notlar' && (
+        {aktifSekme === "notlar" && (
           <NotlarSekmesi programId={aktifProgram?.id} supabase={supabase} />
         )}
-        {aktifSekme === 'odevler' && (
+        {aktifSekme === "odevler" && (
           <OdevlerSekmesi programId={aktifProgram?.id} supabase={supabase} />
         )}
-        {aktifSekme === 'duyurular' && (
+        {aktifSekme === "duyurular" && (
           <DuyurularSekmesi programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
         )}
-        {aktifSekme === 'hocalar' && (
+        {aktifSekme === "hocalar" && (
           <HocalarSekme programId={aktifProgram?.id} supabase={supabase} />
         )}
-        {aktifSekme === 'genelbakis' && (
+        {aktifSekme === "genelbakis" && (
           <GenelBakisSekmesi programId={aktifProgram?.id} supabase={supabase} tema={tema} />
         )}
       </main>
+
+      {/* Yukarıya Doğru Akışkan Esneyen Tek Parça Sıvı Cam Dock */}
+      <div>
+        {digerAcik && (
+          <div 
+            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]"
+            onClick={() => setDigerAcik(false)}
+          />
+        )}
+
+        <div className="fixed bottom-5 inset-x-0 mx-auto z-50 w-[92vw] max-w-[380px] pointer-events-auto">
+          <motion.nav layout animate={{ 
+              height: digerAcik ? "auto" : "56px",
+              borderRadius: digerAcik ? "28px" : "999px"
+            }}
+            transition={{ type: "spring", stiffness: 380, damping: 32, mass: 0.8 }}
+            className="relative p-1.5 select-none overflow-hidden"
+            style={{
+              backgroundColor: "rgba(255, 255, 255, 0.02)",
+              backdropFilter: "blur(5px) saturate(200%) contrast(110%)",
+              WebkitBackdropFilter: "blur(20px) saturate(200%) contrast(110%)",
+              border: "1px solid rgba(255, 255, 255, 0.45)",
+              boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.20), inset 0 1px 2px rgba(255, 255, 255, 0.70), inset 0 -1px 2px rgba(0, 0, 0, 0.10)"
+            }}
+          >
+            {/* Üst Katman: Diğere Basınca Açılan Şık Izgara Menü */}
+            {digerAcik && (
+              <motion.div 
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+                className="grid grid-cols-3 gap-2 p-3 mb-2 border-b border-white/15"
+              >
+                {DIGER_SEKMELER.map((s) => {
+                  const Ikon = s.ikon;
+                  const aktif = aktifSekme === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        setAktifSekme(s.id);
+                        setDigerAcik(false);
+                      }}
+                      className={`flex flex-col items-center justify-center p-2 rounded-2xl transition cursor-pointer active:scale-95 ${
+                        aktif 
+                          ? "bg-primary/20 text-primary font-semibold border border-primary/30" 
+                          : "text-foreground/75 hover:bg-white/10"
+                      }`}
+                    >
+                      <Ikon className="size-5 mb-1" />
+                      <span className="text-[11px] tracking-tight text-center leading-none">{s.ad}</span>
+                    </button>
+                  );
+                })}
+              </motion.div>
+            )}
+
+            {/* Alt Katman: Sabit 5 Ana Buton */}
+            <div className="relative flex items-center w-full h-[44px]">
+              {ADMIN_ANA_SEKMELER.map((item) => {
+                const aktif = (aktifSekme === item.id) || (item.id === "diger" && (digerAcik || DIGER_SEKMELER.some(d => d.id === aktifSekme)));
+                const Ikon = item.id === "diger" && digerAcik ? X : item.ikon;
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      if (item.id === "diger") {
+                        setDigerAcik(prev => !prev);
+                      } else {
+                        setAktifSekme(item.id);
+                        setDigerAcik(false);
+                      }
+                    }}
+                    className="relative z-10 flex-1 flex flex-col items-center justify-center py-1 rounded-full cursor-pointer transition-transform duration-150 active:scale-95"
+                  >
+                    {aktif && (
+                      <motion.div
+                        layoutId="admin-active-mercury"
+                        className="absolute inset-0 rounded-full z-0"
+                        style={{
+                          backgroundColor: "rgba(27, 67, 50, 0.20)",
+                          border: "1px solid rgba(27, 67, 50, 0.35)",
+                          boxShadow: "0 2px 8px rgba(27, 67, 50, 0.10), inset 0 1px 1px rgba(255, 255, 255, 0.45)"
+                        }}
+                        transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                      />
+                    )}
+
+                    <div className="relative z-10">
+                      <Ikon 
+                        className={`size-5 transition-transform duration-200 ${aktif ? "scale-105" : "scale-100"}`}
+                        style={{
+                          color: aktif ? "#1b4332" : "rgba(30, 41, 59, 0.70)",
+                          strokeWidth: aktif ? 2.3 : 1.85
+                        }}
+                      />
+                    </div>
+
+                    <span
+                      className={`relative z-10 text-[11px] mt-0.5 tracking-tight leading-none transition-all duration-200 ${
+                        aktif ? "font-semibold" : "font-medium"
+                      }`}
+                      style={{
+                        color: aktif ? "#1b4332" : "rgba(30, 41, 59, 0.70)"
+                      }}
+                    >
+                      {item.id === "diger" && digerAcik ? "Kapat" : item.ad}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </motion.nav>
+        </div>
+      </div>
     </div>
   )
 }
+
 
 // ===== SINIFLAR =====
 function SiniflarSekme({ programId, supabase }: { programId: string, supabase: any }) {

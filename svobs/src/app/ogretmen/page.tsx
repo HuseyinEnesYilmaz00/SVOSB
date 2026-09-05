@@ -10,7 +10,17 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import { FloatingDock, DockItem } from '@/components/FloatingDock'
+import { CalendarCheck, FileText, BookOpen, Bell } from 'lucide-react'
 
+
+
+const OGRETMEN_SEKMELER: DockItem[] = [
+  { id: "yoklama", ad: "Yoklama", ikon: CalendarCheck },
+  { id: "notlar", ad: "Notlar", ikon: FileText },
+  { id: "odevler", ad: "Ödevler", ikon: BookOpen },
+  { id: "duyurular", ad: "Duyurular", ikon: Bell },
+]
 
 export default function OgretmenPage() {
   const [kullanici, setKullanici] = useState<any>(null)
@@ -112,21 +122,7 @@ export default function OgretmenPage() {
 
       {/* Ders Seçici */}
       {dersler.length > 1 && (
-        <div className="border-b bg-card px-6 py-2 flex gap-2">
-          {dersler.map((d) => (
-            <button
-              key={d.ders_id}
-              onClick={() => setSecilenDers(d)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
-                secilenDers?.ders_id === d.ders_id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'border border-border text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              {d.dersler?.ad} — {d.dersler?.siniflar?.ad}
-            </button>
-          ))}
-        </div>
+        {/* Sekmeler FloatingDock a taşındı */}
       )}
 
       {dersler.length === 0 ? (
@@ -1041,6 +1037,7 @@ function OgretmenOdevler({ dersId, sinifId, dersAd, supabase, kullanici }: any) 
           </div>
         </div>
       )}
-    </div>
+      <FloatingDock items={OGRETMEN_SEKMELER} aktifId={aktifSekme} onChange={(id) => setAktifSekme(id)} />
+</div>
   )
 }

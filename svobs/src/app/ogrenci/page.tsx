@@ -6,18 +6,34 @@ import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { StudentReportView } from '@/components/student/student-report-view'
 import { SorumlulukPaneli } from '@/app/ogrenci/sorumluluk'
-import { BookOpen, CalendarCheck, FileText, Bell, Inbox, Camera, Award, Flame, Star, Sparkles, Users, TrendingUp } from 'lucide-react'
+import { FloatingDock, DockItem } from '@/components/FloatingDock'
+import { 
+  BookOpen, 
+  CalendarCheck, 
+  FileText, 
+  Bell, 
+  Inbox, 
+  Camera, 
+  Award, 
+  Flame, 
+  Star, 
+  Sparkles, 
+  Users, 
+  TrendingUp,
+  User,
+  LogOut,
+  CheckCheck
+} from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { guncelAkademikDonem, tarihtenDonem } from '@/lib/donem'
 
 const SEKMELER = [
-  { id: 'program', ad: 'Ders Programı' },
-  { id: 'dersler', ad: 'Dersler' },
-  { id: 'duyurular', ad: 'Duyurular' },
-  { id: 'hesabim', ad: 'Hesabım' },
+  { id: 'program', ad: 'Program', ikon: CalendarCheck },
+  { id: 'dersler', ad: 'Dersler', ikon: BookOpen },
+  { id: 'duyurular', ad: 'Duyurular', ikon: Bell },
+  { id: 'hesabim', ad: 'Hesabım', ikon: User },
 ]
 
 export default function OgrenciPage() {
@@ -26,6 +42,7 @@ export default function OgrenciPage() {
   const [sinif, setSinif] = useState<any>(null)
   const [program, setProgram] = useState<any>(null)
   const [duyurular, setDuyurular] = useState<any[]>([])
+  const [okunmamisDuyuruVar, setOkunmamisDuyuruVar] = useState(false)
   const [dersler, setDersler] = useState<any[]>([])
   const [dersSorumluluklari, setDersSorumluluklari] = useState<any[]>([])
   const [genelOrtalama, setGenelOrtalama] = useState<number | null>(null)
@@ -33,7 +50,6 @@ export default function OgrenciPage() {
   const [avatarYukleniyor, setAvatarYukleniyor] = useState(false)
   const [secilenRozet, setSecilenRozet] = useState<{ ad: string, aciklama: string } | null>(null)
   const [yukleniyor, setYukleniyor] = useState(true)
-  
   const router = useRouter()
   const supabase = createClient()
 
@@ -44,30 +60,26 @@ export default function OgrenciPage() {
 
       const { data: k } = await supabase
         .from('kullanicilar').select('*').eq('id', user.id).single()
-        
       if (!k) { router.push('/giris'); return }
       if (k.rol === 'super_admin' || k.rol === 'program_admin') { router.push('/admin'); return }
       if (k.rol === 'ogretmen') { router.push('/ogretmen'); return }
-      
       setKullanici(k)
 
       const { data: o } = await supabase
         .from('ogrenciler')
         .select('*, siniflar (*, programlar (*))')
         .eq('kullanici_id', user.id).single()
-        
       if (!o) { setYukleniyor(false); return }
       if (o.aktif === false) {
         await supabase.auth.signOut()
         router.push('/giris')
         return
       }
-      
       setOgrenci(o)
       setSinif(o.siniflar)
       setProgram(o.siniflar?.programlar)
 
-      // Duyurular
+      // Duyurular ve Okundu Kontrolü
       const sinifIdGuvenli = o.siniflar?.id || '00000000-0000-0000-0000-000000000000'
       const { data: duy } = await supabase
         .from('duyurular')
@@ -75,18 +87,28 @@ export default function OgrenciPage() {
         .eq('program_id', o.siniflar?.programlar?.id)
         .or(`hedef_tipi.eq.tumu,hedef_sinif_id.eq.${sinifIdGuvenli},hedef_kullanici_id.eq.${user.id}`)
         .order('olusturulma_tarihi', { ascending: false })
-        
-      setDuyurular(duy || [])
+      
+      const gelenDuyurular = duy || []
+      setDuyurular(gelenDuyurular)
+
+      const sonOkumaZamani = localStorage.getItem('svobs_son_okunan_duyuru')
+      if (gelenDuyurular.length > 0) {
+        if (!sonOkumaZamani) {
+          setOkunmamisDuyuruVar(true)
+        } else {
+          const enSonDuyuruTarihi = new Date(gelenDuyurular[0].olusturulma_tarihi).getTime()
+          setOkunmamisDuyuruVar(enSonDuyuruTarihi > parseInt(sonOkumaZamani, 10))
+        }
+      }
 
       // Ders sorumluluklari
       const { data: ds } = await supabase
         .from('ders_sorumlulari')
         .select('*, dersler (ad)')
         .eq('ogrenci_id', o.id)
-        
       setDersSorumluluklari(ds || [])
 
-      // Dersler - siniftaki tüm dersler
+      // Dersler
       const { data: dersData } = await supabase
         .from('dersler')
         .select('*')
@@ -94,12 +116,10 @@ export default function OgrenciPage() {
         .eq('aktif', true)
         .order('gun')
 
-      // GEÇ VE İZİNLİ 0 PUAN OLACAK ŞEKİLDE AYARLANDI
       const devamPuanlari: Record<string, number> = {
         katildi: 100, gec: 0, izinli: 0, katilmadi: 0
       }
 
-      // Bütün sınavları ve devamsızlıkları toplayacağımız havuz (Admin ile aynı tekil genel ortalama için)
       let tumNotlar: any[] = []
       let tumYoklamalar: any[] = []
 
@@ -129,7 +149,6 @@ export default function OgrenciPage() {
           ? yoklamalar.reduce((s: number, y: any) => s + (devamPuanlari[y.durum] || 0), 0) / yoklamalar.length
           : null
 
-        // %50 SINAV / %50 DEVAM MANTIĞI
         let dersPuaniHam = null
         if (sinavOrtHam !== null && devamOrtHam !== null) {
           dersPuaniHam = sinavOrtHam * 0.5 + devamOrtHam * 0.5
@@ -155,7 +174,6 @@ export default function OgrenciPage() {
             tarih: y.tarih,
             durum: y.durum,
           })),
-          // Sadece arayüzde gösterirken 2 decimal yapıyoruz
           sinavOrtalama: sinavOrtHam !== null ? Number(sinavOrtHam.toFixed(2)) : null,
           devamPuani: devamOrtHam !== null ? Number(devamOrtHam.toFixed(2)) : null,
           dersPuani: dersPuaniHam !== null ? Number(dersPuaniHam.toFixed(2)) : null,
@@ -164,7 +182,6 @@ export default function OgrenciPage() {
 
       setDersler(dersDetaylari)
 
-      // ADMİN İLE AYNI GENEL ORTALAMA MANTIĞI (%50 Sınav / %50 Devam ile Tüm Kayıtların Toplamı)
       const genelSinavOrt = tumNotlar.length > 0 ? tumNotlar.reduce((s, n) => s + n.puan, 0) / tumNotlar.length : null
       const genelDevamOrt = tumYoklamalar.length > 0 ? tumYoklamalar.reduce((s, y) => s + (devamPuanlari[y.durum] || 0), 0) / tumYoklamalar.length : null
 
@@ -183,6 +200,12 @@ export default function OgrenciPage() {
     yukle()
   }, [])
 
+  function duyurulariOkunduIsaretle() {
+    localStorage.setItem('svobs_son_okunan_duyuru', Date.now().toString())
+    setOkunmamisDuyuruVar(false)
+    toast.success('Tüm duyurular okundu sayıldı')
+  }
+
   async function avatarYukle(file: File) {
     if (!kullanici) return
     if (!file.type.startsWith('image/')) {
@@ -190,7 +213,6 @@ export default function OgrenciPage() {
       return
     }
     setAvatarYukleniyor(true)
-    
     const uzanti = file.name.split('.').pop()
     const yol = `${kullanici.id}/avatar.${uzanti}`
 
@@ -228,6 +250,13 @@ export default function OgrenciPage() {
     router.push('/giris')
   }
 
+  const dockItems: DockItem[] = SEKMELER.map((s) => ({
+    id: s.id,
+    ad: s.ad,
+    ikon: s.ikon,
+    rozet: s.id === 'duyurular' ? okunmamisDuyuruVar : false
+  }))
+
   if (yukleniyor) {
     return (
       <div className="min-h-svh flex items-center justify-center bg-background">
@@ -237,57 +266,43 @@ export default function OgrenciPage() {
   }
 
   return (
-    <div className="min-h-svh bg-background">
-      <header className="border-b bg-card px-6 py-3 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <img src="/sv-logo.png" alt="Siyer Vakfı" className="w-8 h-8 object-contain brightness-0" />
+    <div className="min-h-svh bg-background relative">
+      {/* Ultra Kompakt Şeffaf Üst Bar (Ekranın yerini çalmaz) */}
+      <header className="px-4 py-2 flex items-center justify-between sticky top-0 z-20 bg-background/60 backdrop-blur-xl border-b border-border/40">
+        <div className="flex items-center gap-2.5">
+          <img src="/sv-logo.png" alt="Siyer Vakfı" className="w-7 h-7 object-contain brightness-0 dark:invert" />
           <div>
-            <p className="text-xs text-muted-foreground">{program?.ad}</p>
+            <p className="text-xs font-semibold leading-none">{program?.ad}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{sinif?.ad}</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          {kullanici?.avatar_url ? (
-            <img src={kullanici.avatar_url} alt="Profil" className="w-9 h-9 rounded-full object-cover border border-border" />
-          ) : (
-            <div className="w-9 h-9 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold">
-              {(kullanici?.ad?.[0] || '') + (kullanici?.soyad?.[0] || '')}
-            </div>
-          )}
-          <div className="text-right">
-            <p className="text-sm font-medium text-foreground">{kullanici?.ad} {kullanici?.soyad}</p>
-            <p className="text-xs text-muted-foreground">{sinif?.ad}</p>
+
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 pr-1 border-r border-border/50">
+            {kullanici?.avatar_url ? (
+              <img src={kullanici.avatar_url} alt="Profil" className="w-7 h-7 rounded-full object-cover border border-border" />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center text-[10px] font-semibold">
+                {(kullanici?.ad?.[0] || '') + (kullanici?.soyad?.[0] || '')}
+              </div>
+            )}
+            <span className="text-xs font-medium hidden sm:inline-block text-foreground">{kullanici?.ad}</span>
           </div>
-          <div className="flex gap-2">
-            <a href="/sifre-degistir">
-              <Button variant="outline" size="sm">Şifre</Button>
-            </a>
-            <Button variant="outline" size="sm" onClick={cikisYap}>Çıkış</Button>
-          </div>
+
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10" 
+            onClick={cikisYap}
+            title="Çıkış Yap"
+          >
+            <LogOut className="size-4" />
+          </Button>
         </div>
       </header>
 
-      <nav className="border-b bg-card px-4 sticky top-[57px] z-10 overflow-x-auto">
-        <div className="flex gap-1 max-w-4xl mx-auto">
-          {SEKMELER.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setAktifSekme(s.id)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-                aktifSekme === s.id
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {s.ad}
-              {s.id === 'duyurular' && duyurular.length > 0 && (
-                <Badge variant="outline" className="ml-1.5 text-xs">{duyurular.length}</Badge>
-              )}
-            </button>
-          ))}
-        </div>
-      </nav>
-
-      <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+      {/* Ana Gövde */}
+      <main className="max-w-4xl mx-auto px-4 py-5 space-y-5 has-dock">
         <OgrenciKatilimYildonumu ogrenci={ogrenci} />
         <OgrenciBuHaftaOzet ogrenciId={ogrenci?.id} dersler={dersler} supabase={supabase} />
 
@@ -296,7 +311,7 @@ export default function OgrenciPage() {
         )}
 
         {aktifSekme === 'dersler' && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <OgrenciOdevlerim ogrenciId={ogrenci?.id} dersler={dersler} supabase={supabase} />
 
             {dersSorumluluklari.length > 0 && (
@@ -321,10 +336,24 @@ export default function OgrenciPage() {
 
         {aktifSekme === 'duyurular' && (
           <Card className="p-0 overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
-              <Bell className="size-4 text-muted-foreground" />
-              <h2 className="font-medium text-sm text-foreground">Duyurular</h2>
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Bell className="size-4 text-muted-foreground" />
+                <h2 className="font-medium text-sm text-foreground">Duyurular</h2>
+              </div>
+              {duyurular.length > 0 && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={duyurulariOkunduIsaretle}
+                  className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-primary"
+                >
+                  <CheckCheck className="size-3.5" />
+                  <span>Tümünü Okundu Say</span>
+                </Button>
+              )}
             </div>
+
             {duyurular.length === 0 ? (
               <div className="px-5 py-12 flex flex-col items-center gap-2 text-sm text-muted-foreground">
                 <Inbox className="size-8 opacity-40" />
@@ -347,7 +376,7 @@ export default function OgrenciPage() {
         )}
 
         {aktifSekme === 'hesabim' && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <Card className="p-0 overflow-hidden">
               <div className="px-5 py-5 flex items-center gap-4">
                 {kullanici?.avatar_url ? (
@@ -381,12 +410,11 @@ export default function OgrenciPage() {
               const rozetler: { ad: string, ikon: any, renk: string, aciklama: string }[] = []
               const puanliDersler = dersler.filter((d: any) => d.dersPuani !== null)
               const tamDevam = dersler.length > 0 && dersler.every((d: any) => d.devamPuani === null || d.devamPuani === 100)
-              
               if (tamDevam && dersler.some((d: any) => d.devamPuani !== null)) {
                 rozetler.push({
                   ad: 'Tam Devam',
                   ikon: Flame,
-                  renk: 'text-orange-500 bg-orange-50',
+                  renk: 'text-orange-500 bg-orange-50 dark:bg-orange-950/40',
                   aciklama: 'Kayıtlı olduğun tüm derslerde devam oranın %100. Hiç ders kaçırmadın, tebrikler!'
                 })
               }
@@ -394,7 +422,7 @@ export default function OgrenciPage() {
                 rozetler.push({
                   ad: 'Yüksek Başarı',
                   ikon: Star,
-                  renk: 'text-amber-500 bg-amber-50',
+                  renk: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40',
                   aciklama: `Genel ortalaman ${genelOrtalama} — 85 ve üzeri ortalamalara verilen bir rozet.`
                 })
               }
@@ -402,13 +430,11 @@ export default function OgrenciPage() {
                 rozetler.push({
                   ad: 'İstikrarlı',
                   ikon: Award,
-                  renk: 'text-emerald-600 bg-emerald-50',
+                  renk: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40',
                   aciklama: 'Kayıtlı olduğun bütün derslerde puanın 70 ve üzerinde. Hiçbir dersin ortalaması düşük değil.'
                 })
               }
-              
               if (rozetler.length === 0) return null
-              
               return (
                 <Card className="p-0 overflow-hidden">
                   <div className="px-5 py-4 border-b border-border">
@@ -449,24 +475,28 @@ export default function OgrenciPage() {
                   </div>
                 ))}
               </div>
-                            <div className="px-5 py-3 border-t border-border">
+              <div className="px-5 py-3 border-t border-border">
                 <a href="/sifre-degistir" className="text-sm text-primary hover:underline">
                   Şifre Değiştir
                 </a>
               </div>
             </Card>
 
-            {/* GÖRÜNÜR GÖRÜNMEZ GİZLİ İMZA */}
             <div className="flex justify-center mt-12 pb-6">
               <span className="text-[10px] text-muted-foreground/20 select-none cursor-default font-mono">
                 enes°
               </span>
             </div>
-            
           </div>
         )}
       </main>
 
+      {/* Ekranın Altında Yüzen Sıvı Cam Navigasyon Barı */}
+      <FloatingDock
+        items={dockItems}
+        aktifId={aktifSekme}
+        onChange={(id) => setAktifSekme(id)}
+      />
 
       {secilenRozet && (
         <div
@@ -511,14 +541,12 @@ function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase:
         const haftaBasi = new Date(bugun)
         haftaBasi.setDate(bugun.getDate() - ((bugun.getDay() + 6) % 7))
         const haftaBasiStr = haftaBasi.toISOString().split('T')[0]
-        
         const { data: ipt } = await supabase
           .from('ders_oturumlari')
           .select('*')
           .in('ders_id', dersIdleri)
           .eq('durum', 'iptal')
           .gte('tarih', haftaBasiStr)
-          
         setIptaller(ipt || [])
       }
       setYukleniyor(false)
@@ -527,29 +555,20 @@ function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase:
   }, [sinifId])
 
   const gunler = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar']
-  const periyotlar: Record<string, string> = {
-    haftalik: 'Her hafta', '2haftada1': '2 haftada bir',
-    '3haftada1': '3 haftada bir', ayda1: 'Ayda bir'
-  }
 
   function dersbuHaftaVarMi(ders: any): boolean {
     if (ders.periyot === 'haftalik') return true
     if (!ders.baslangic_tarihi) return true
-    
     const bugun = new Date()
     const baslangic = new Date(ders.baslangic_tarihi)
-    
     const buHaftaBasi = new Date(bugun)
     buHaftaBasi.setDate(bugun.getDate() - ((bugun.getDay() + 6) % 7))
     buHaftaBasi.setHours(0, 0, 0, 0)
-    
     const baslangicHaftaBasi = new Date(baslangic)
     baslangicHaftaBasi.setDate(baslangic.getDate() - ((baslangic.getDay() + 6) % 7))
     baslangicHaftaBasi.setHours(0, 0, 0, 0)
-    
     const farkHafta = Math.round((buHaftaBasi.getTime() - baslangicHaftaBasi.getTime()) / (7 * 24 * 60 * 60 * 1000))
     if (farkHafta < 0) return false
-    
     switch (ders.periyot) {
       case '2haftada1': return farkHafta % 2 === 0
       case '3haftada1': return farkHafta % 3 === 0
@@ -583,13 +602,11 @@ function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase:
             const gunDersleri = dersler
               .filter(d => d.gun === gun)
               .sort((a: any, b: any) => (a.saat || '').localeCompare(b.saat || ''))
-              
             return (
               <div key={gun} className="border-r border-border last:border-r-0 min-h-[120px] p-1.5 space-y-1">
                 {gunDersleri.map((d: any) => {
                   const iptal = iptaller.find(i => i.ders_id === d.id)
                   const buHafta = dersbuHaftaVarMi(d)
-                  
                   return (
                     <div
                       key={d.id}
@@ -628,7 +645,6 @@ function OgrenciOdevlerim({ ogrenciId, dersler, supabase }: { ogrenciId: string,
   useEffect(() => {
     async function yukle() {
       if (!ogrenciId || dersler.length === 0) { setYukleniyor(false); return }
-      
       const dersIds = dersler.map(d => d.id)
       const { data: odevData } = await supabase
         .from('odevler')
@@ -898,7 +914,6 @@ function OgrenciBuHaftaOzet({ ogrenciId, dersler, supabase }: { ogrenciId: strin
   useEffect(() => {
     async function yukle() {
       if (!ogrenciId || dersler.length === 0) { setYukleniyor(false); return }
-      
       const dersIds = dersler.map((d: any) => d.id)
       const bugun = new Date()
       const yediGunSonra = new Date(bugun.getTime() + 7 * 24 * 60 * 60 * 1000)
@@ -922,7 +937,6 @@ function OgrenciBuHaftaOzet({ ogrenciId, dersler, supabase }: { ogrenciId: strin
 
       const teslimEdilenIds = new Set((teslimData || []).map((t: any) => t.odev_id))
       const bekleyenler = odevData.filter((o: any) => !teslimEdilenIds.has(o.id))
-      
       setYaklasanOdevler(bekleyenler)
       setYukleniyor(false)
     }
@@ -982,12 +996,10 @@ function OgrenciKatilimYildonumu({ ogrenci }: { ogrenci: any }) {
   const kayitTarihi = new Date(ogrenci.created_at)
   const bugun = new Date()
   const yilFarki = bugun.getFullYear() - kayitTarihi.getFullYear()
-  
   if (yilFarki < 1) return null
 
   const buYilkiYildonumu = new Date(bugun.getFullYear(), kayitTarihi.getMonth(), kayitTarihi.getDate())
   const farkGun = Math.abs((bugun.getTime() - buYilkiYildonumu.getTime()) / (1000 * 60 * 60 * 24))
-  
   if (farkGun > 3) return null
 
   return (
@@ -1005,7 +1017,6 @@ function OgrenciKatilimYildonumu({ ogrenci }: { ogrenci: any }) {
 function OgrenciDevamTrendMesaji({ dersler }: { dersler: any[] }) {
   const puanlar: Record<string, number> = { katildi: 100, gec: 0, izinli: 0, katilmadi: 0 }
   const tumYoklamalar = dersler.flatMap((d: any) => d.yoklamalar || [])
-  
   if (tumYoklamalar.length === 0) return null
 
   const donemGruplu: Record<string, number[]> = {}
@@ -1020,10 +1031,8 @@ function OgrenciDevamTrendMesaji({ dersler }: { dersler: any[] }) {
 
   const oncekiDonem = donemler[donemler.length - 2]
   const guncelDonemKey = donemler[donemler.length - 1]
-  
   const oncekiOrt = donemGruplu[oncekiDonem].reduce((s, p) => s + p, 0) / donemGruplu[oncekiDonem].length
   const guncelOrt = donemGruplu[guncelDonemKey].reduce((s, p) => s + p, 0) / donemGruplu[guncelDonemKey].length
-  
   const fark = Number((guncelOrt - oncekiOrt).toFixed(2))
 
   if (fark === 0) return null
@@ -1049,10 +1058,8 @@ function SinifTopluluk({ dersler, supabase }: { dersler: any[], supabase: any })
   useEffect(() => {
     async function yukle() {
       if (dersler.length === 0) return
-      
       const dersIds = dersler.map((d: any) => d.id)
       const { data: odevData } = await supabase.from('odevler').select('id').in('ders_id', dersIds)
-      
       const odevIds = (odevData || []).map((o: any) => o.id)
       if (odevIds.length === 0) { setToplamTeslim(0); return }
 
@@ -1063,7 +1070,6 @@ function SinifTopluluk({ dersler, supabase }: { dersler: any[], supabase: any })
 
       const guncelDonem = guncelAkademikDonem()
       const buDonemTeslim = (teslimData || []).filter((t: any) => tarihtenDonem(t.teslim_tarihi) === guncelDonem)
-      
       setToplamTeslim(buDonemTeslim.length)
     }
     yukle()
