@@ -2,7 +2,7 @@
 import { toast } from 'sonner'
 
 import { programTema, temaBg, temaAccent, temaHover, temaPrimary } from '@/lib/tema'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { ui } from '@/lib/ui'
@@ -11,9 +11,9 @@ import ExportButton from '@/components/ui/ExportButton'; // kendi path'ine göre
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { FloatingDock, DockItem } from "@/components/FloatingDock"
-import { Users, BookOpen, CalendarCheck, FileCheck, MoreHorizontal, X, GraduationCap, FileText, Bell, Award, LayoutDashboard } from "lucide-react"
+import { Users, BookOpen, CalendarCheck, FileCheck, MoreHorizontal, X, GraduationCap, FileText, Bell, Award, LayoutDashboard, Download, KeyRound, LogOut, Database, FileSpreadsheet } from "lucide-react"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { guncelDonem, guncelAkademikDonem } from '@/lib/donem'
 
@@ -34,6 +34,7 @@ const DIGER_SEKMELER = [
   { id: "duyurular", ad: "Duyurular", ikon: Bell },
   { id: "hocalar", ad: "Hocalar", ikon: Award },
   { id: "genelbakis", ad: "Genel Bakış", ikon: LayoutDashboard },
+  { id: "disaaktar", ad: "Dışa Aktar", ikon: Download },
 ];
 
 export default function AdminPage() {
@@ -41,7 +42,27 @@ export default function AdminPage() {
   const [programlar, setProgramlar] = useState<any[]>([])
   const [aktifProgram, setAktifProgram] = useState<any>(null)
   const [aktifSekme, setAktifSekme] = useState('ogrenciler')
-  const [digerAcik, setDigerAcik] = useState(false)
+  const [digerAcik, setDigerAcik] = useState(false);
+  const [disaAktarAcik, setDisaAktarAcik] = useState(false);
+  const dockRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!digerAcik) return;
+    const handleClick = (e: MouseEvent | TouchEvent) => {
+      if (dockRef.current && !dockRef.current.contains(e.target as Node)) {
+        setDigerAcik(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDigerAcik(false);
+    };
+    document.addEventListener("pointerdown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("pointerdown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [digerAcik]);
   const [yukleniyor, setYukleniyor] = useState(true)
   const router = useRouter()
   const supabase = createClient()
@@ -116,58 +137,61 @@ export default function AdminPage() {
 
   return (
   <div className={`tema-${tema} min-h-svh bg-background`}>
-      <header className="border-b bg-card px-3 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center justify-between sm:justify-start gap-3">
-          <div className="flex items-center gap-3">
-            <img src="/sv-logo.png" alt="Siyer Vakfı" className="w-8 h-8 object-contain brightness-0 shrink-0" />
-            <div>
-              <p className="font-semibold text-sm text-foreground">Siyer Vakfı</p>
-              <p className="text-xs text-muted-foreground">Yönetim Paneli</p>
-            </div>
-          </div>
-          <div className="text-right sm:hidden">
-            <p className="text-sm font-medium text-foreground">{kullanici?.ad} {kullanici?.soyad}</p>
-            <p className="text-xs text-muted-foreground">{kullanici?.rol === 'super_admin' ? 'Süper Admin' : 'Program Yöneticisi'}</p>
+      <header className="border-b bg-card px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <img src="/sv-logo.png" alt="Siyer Vakfı" className="w-8 h-8 object-contain brightness-0 shrink-0" />
+          <div>
+            <p className="font-semibold text-sm text-foreground">Siyer Vakfı</p>
+            <p className="text-xs text-muted-foreground">Yönetim Paneli</p>
           </div>
         </div>
-        <div className="flex items-center gap-4 flex-wrap">
+
+        <div className="flex items-center gap-2.5">
+          <div className="size-8 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+            {(kullanici?.ad?.[0] || "") + (kullanici?.soyad?.[0] || "")}
+          </div>
           <div className="text-right hidden sm:block">
-            <p className="text-sm font-medium text-foreground">{kullanici?.ad} {kullanici?.soyad}</p>
-            <p className="text-xs text-muted-foreground">{kullanici?.rol === 'super_admin' ? 'Süper Admin' : 'Program Yöneticisi'}</p>
+            <p className="text-sm font-medium text-foreground leading-tight">{kullanici?.ad} {kullanici?.soyad}</p>
+            <p className="text-xs text-muted-foreground leading-tight">{kullanici?.rol === "super_admin" ? "Süper Admin" : "Program Yöneticisi"}</p>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            <ExportButton izinliProgramIdler={aktifProgram ? [aktifProgram.id] : []} />
-            <a href="/sifre-degistir">
-              <Button variant="outline" size="sm">Şifre</Button>
-            </a>
-            <Button variant="outline" size="sm" onClick={cikisYap}>Çıkış</Button>
-          </div>
-                </div>
+        </div>
       </header>
 
-      {/* Program Seçici Hap Butonlar */}
+      {/* Program Seçici - Sıvı Cam Segmentli Ray */}
       {programlar.length > 1 && (
-        <div className="border-b bg-card/60 backdrop-blur-sm px-6 py-2.5 flex gap-2 overflow-x-auto">
-          {programlar.map((p) => {
-            const aktif = aktifProgram?.id === p.id;
-            return (
-              <button
-                key={p.id}
-                onClick={() => setAktifProgram(p)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition cursor-pointer whitespace-nowrap ${
-                  aktif
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "border border-border/70 text-muted-foreground hover:bg-muted/60"
-                }`}
-              >
-                {p.ad}
-              </button>
-            );
-          })}
+        <div className="px-4 sm:px-6 pt-3 pb-2 flex items-center justify-start sm:justify-center overflow-x-auto">
+          <div 
+            className="inline-flex items-center gap-1.5 p-1.5 rounded-2xl border border-white/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),0_4px_20px_-4px_rgba(0,0,0,0.05)] select-none"
+            style={{
+              backgroundColor: "rgba(255, 255, 255, 0.50)",
+              backdropFilter: "blur(20px) saturate(190%)",
+              WebkitBackdropFilter: "blur(20px) saturate(190%)"
+            }}
+          >
+            {programlar.map((p) => {
+              const aktif = aktifProgram?.id === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setAktifProgram(p)}
+                  className={`relative px-4 py-1.5 rounded-xl text-xs font-semibold tracking-tight transition-all duration-200 cursor-pointer whitespace-nowrap active:scale-95 flex items-center gap-2 ${
+                    aktif
+                      ? "text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_6px_16px_-2px_rgba(27,67,50,0.35)] border border-[#2d6a4f]/60"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-white/60 border border-transparent"
+                  }`}
+                  style={aktif ? { backgroundColor: "#1b4332" } : {}}
+                >
+                  {aktif && (
+                    <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+                  )}
+                  <span>{p.ad}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* Ana Sekme İçerikleri */}
       <main className="p-4 sm:p-6 max-w-7xl mx-auto pb-32">
         {aktifSekme === "ogrenciler" && (
           <OgrencilerSekme programId={aktifProgram?.id} supabase={supabase} tema={tema} />
@@ -200,61 +224,100 @@ export default function AdminPage() {
 
       {/* Yukarıya Doğru Akışkan Esneyen Tek Parça Sıvı Cam Dock */}
       <div>
-        {digerAcik && (
-          <div 
-            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]"
-            onClick={() => setDigerAcik(false)}
-          />
-        )}
-
-        <div className="fixed bottom-5 inset-x-0 mx-auto z-50 w-[92vw] max-w-[380px] pointer-events-auto">
-          <motion.nav layout animate={{ 
+        <div ref={dockRef} className="fixed bottom-5 inset-x-0 mx-auto z-50 w-[92vw] max-w-[380px] pointer-events-auto">
+          <motion.nav
+            animate={{
               height: digerAcik ? "auto" : "56px",
               borderRadius: digerAcik ? "28px" : "999px"
             }}
-            transition={{ type: "spring", stiffness: 380, damping: 32, mass: 0.8 }}
+            transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
             className="relative p-1.5 select-none overflow-hidden"
             style={{
               backgroundColor: "rgba(255, 255, 255, 0.02)",
-              backdropFilter: "blur(5px) saturate(200%) contrast(110%)",
-              WebkitBackdropFilter: "blur(20px) saturate(200%) contrast(110%)",
-              border: "1px solid rgba(255, 255, 255, 0.45)",
-              boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.20), inset 0 1px 2px rgba(255, 255, 255, 0.70), inset 0 -1px 2px rgba(0, 0, 0, 0.10)"
+              backdropFilter: "blur(10px) saturate(210%) contrast(105%)",
+              WebkitBackdropFilter: "blur(24px) saturate(210%) contrast(105%)",
+              border: "1px solid rgba(255, 255, 255, 0.28)",
+              boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.50), inset 0 -1px 1px rgba(0, 0, 0, 0.05)"
             }}
           >
-            {/* Üst Katman: Diğere Basınca Açılan Şık Izgara Menü */}
-            {digerAcik && (
-              <motion.div 
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2 }}
-                className="grid grid-cols-3 gap-2 p-3 mb-2 border-b border-white/15"
-              >
-                {DIGER_SEKMELER.map((s) => {
-                  const Ikon = s.ikon;
-                  const aktif = aktifSekme === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => {
-                        setAktifSekme(s.id);
-                        setDigerAcik(false);
-                      }}
-                      className={`flex flex-col items-center justify-center p-2 rounded-2xl transition cursor-pointer active:scale-95 ${
-                        aktif 
-                          ? "bg-primary/20 text-primary font-semibold border border-primary/30" 
-                          : "text-foreground/75 hover:bg-white/10"
-                      }`}
-                    >
-                      <Ikon className="size-5 mb-1" />
-                      <span className="text-[11px] tracking-tight text-center leading-none">{s.ad}</span>
-                    </button>
-                  );
-                })}
-              </motion.div>
-            )}
+            {/* Üst Katman: 3x2 Izgara + Hesap Alanı */}
+            <AnimatePresence>
+              {digerAcik && (
+                <motion.div
+                  key="admin-diger-menu"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="px-2 pt-2 pb-2 border-b border-white/15"
+                >
+                  <div className="grid grid-cols-3 gap-2 px-1 pt-1 pb-2">
+                    {DIGER_SEKMELER.map((s) => {
+                      const Ikon = s.ikon;
+                      const aktif = aktifSekme === s.id;
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            if (s.id === "disaaktar") {
+                              setDisaAktarAcik(true);
+                              setDigerAcik(false);
+                            } else {
+                              setAktifSekme(s.id);
+                              setDigerAcik(false);
+                            }
+                          }}
+                          className={`flex flex-col items-center justify-center p-2 rounded-2xl transition cursor-pointer active:scale-95 ${
+                            aktif 
+                              ? "bg-primary/20 text-primary font-semibold border border-primary/30" 
+                              : "text-foreground/75 hover:bg-white/10"
+                          }`}
+                        >
+                          <Ikon className="size-5 mb-1" />
+                          <span className="text-[11px] tracking-tight text-center leading-tight">{s.ad}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-            {/* Alt Katman: Sabit 5 Ana Buton */}
+                  {/* Alt Katman: Profil, Şifre ve Çıkış */}
+                  <div className="mt-1 pt-2 px-2 border-t border-white/10 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="size-7 rounded-full bg-primary/20 border border-primary/30 text-primary flex items-center justify-center text-[11px] font-bold shrink-0">
+                        {(kullanici?.ad?.[0] || "") + (kullanici?.soyad?.[0] || "")}
+                      </div>
+                      <div className="truncate">
+                        <p className="text-[11px] font-semibold text-foreground truncate leading-tight">
+                          {kullanici?.ad} {kullanici?.soyad}
+                        </p>
+                        <p className="text-[9px] text-muted-foreground leading-tight">
+                          {kullanici?.rol === "super_admin" ? "Süper Admin" : "Program Yöneticisi"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <a
+                        href="/sifre-degistir"
+                        className="px-2.5 py-1 rounded-xl text-[10px] font-medium text-slate-700 bg-white/40 hover:bg-white/70 border border-white/60 shadow-sm transition active:scale-95"
+                      >
+                        Şifre
+                      </a>
+                      <button
+                        type="button"
+                        onClick={cikisYap}
+                        className="px-2.5 py-1 rounded-xl text-[10px] font-medium text-red-600 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 shadow-sm transition active:scale-95 cursor-pointer"
+                      >
+                        Çıkış
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Alt Katman: 44px Tam Merkeze Oturan 5 Buton */}
             <div className="relative flex items-center w-full h-[44px]">
               {ADMIN_ANA_SEKMELER.map((item) => {
                 const aktif = (aktifSekme === item.id) || (item.id === "diger" && (digerAcik || DIGER_SEKMELER.some(d => d.id === aktifSekme)));
@@ -263,6 +326,7 @@ export default function AdminPage() {
                 return (
                   <button
                     key={item.id}
+                    type="button"
                     onClick={() => {
                       if (item.id === "diger") {
                         setDigerAcik(prev => !prev);
@@ -271,7 +335,7 @@ export default function AdminPage() {
                         setDigerAcik(false);
                       }
                     }}
-                    className="relative z-10 flex-1 flex flex-col items-center justify-center py-1 rounded-full cursor-pointer transition-transform duration-150 active:scale-95"
+                    className="relative z-10 flex-1 h-full flex flex-col items-center justify-center rounded-full cursor-pointer transition-transform duration-150 active:scale-95"
                   >
                     {aktif && (
                       <motion.div
@@ -286,37 +350,40 @@ export default function AdminPage() {
                       />
                     )}
 
-                    <div className="relative z-10">
+                    <div className="relative z-10 flex flex-col items-center justify-center gap-0.5">
                       <Ikon 
-                        className={`size-5 transition-transform duration-200 ${aktif ? "scale-105" : "scale-100"}`}
+                        className={`size-4.5 transition-transform duration-200 ${aktif ? "scale-105" : "scale-100"}`}
                         style={{
                           color: aktif ? "#1b4332" : "rgba(30, 41, 59, 0.70)",
                           strokeWidth: aktif ? 2.3 : 1.85
                         }}
                       />
+                      <span
+                        className={`text-[10px] tracking-tight leading-none text-center whitespace-nowrap transition-all duration-200 ${aktif ? "font-semibold" : "font-medium"}`}
+                        style={{
+                          color: aktif ? "#1b4332" : "rgba(30, 41, 59, 0.70)"
+                        }}
+                      >
+                        {item.id === "diger" && digerAcik ? "Kapat" : item.ad}
+                      </span>
                     </div>
-
-                    <span
-                      className={`relative z-10 text-[11px] mt-0.5 tracking-tight leading-none transition-all duration-200 ${
-                        aktif ? "font-semibold" : "font-medium"
-                      }`}
-                      style={{
-                        color: aktif ? "#1b4332" : "rgba(30, 41, 59, 0.70)"
-                      }}
-                    >
-                      {item.id === "diger" && digerAcik ? "Kapat" : item.ad}
-                    </span>
                   </button>
                 );
               })}
             </div>
           </motion.nav>
         </div>
+
+        {/* Dışa Aktar Modalı */}
+        <ExportButton 
+          izinliProgramIdler={aktifProgram ? [aktifProgram.id] : []} 
+          disaAktarAcik={disaAktarAcik} 
+          onKapat={() => setDisaAktarAcik(false)} 
+        />
       </div>
     </div>
-  )
+  );
 }
-
 
 // ===== SINIFLAR =====
 function SiniflarSekme({ programId, supabase }: { programId: string, supabase: any }) {
@@ -738,7 +805,7 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
               <button
                 onClick={sinifEkle}
                 disabled={kaydediyor}
-                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50"
+                className="glass-btn-secondary"
               >
                 {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
               </button>
@@ -952,11 +1019,11 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPasifGoster(!pasifGoster)}
-              className="text-xs border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50"
+              className="glass-btn-secondary"
             >
               {pasifGoster ? 'Aktif Öğrenciler' : `Pasif Öğrenciler (${ogrenciler.filter(o => !o.aktif).length})`}
             </button>
-            <button onClick={() => setModalAcik(true)} className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80">
+            <button onClick={() => setModalAcik(true)} className="glass-btn-primary">
               + Öğrenci Ekle
             </button>
           </div>

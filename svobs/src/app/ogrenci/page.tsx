@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { StudentReportView } from '@/components/student/student-report-view'
 import { SorumlulukPaneli } from '@/app/ogrenci/sorumluluk'
-import { FloatingDock, DockItem } from '@/components/FloatingDock'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
   BookOpen, 
   CalendarCheck, 
@@ -250,12 +250,6 @@ export default function OgrenciPage() {
     router.push('/giris')
   }
 
-  const dockItems: DockItem[] = SEKMELER.map((s) => ({
-    id: s.id,
-    ad: s.ad,
-    ikon: s.ikon,
-    rozet: s.id === 'duyurular' ? okunmamisDuyuruVar : false
-  }))
 
   if (yukleniyor) {
     return (
@@ -491,12 +485,70 @@ export default function OgrenciPage() {
         )}
       </main>
 
-      {/* Ekranın Altında Yüzen Sıvı Cam Navigasyon Barı */}
-      <FloatingDock
-        items={dockItems}
-        aktifId={aktifSekme}
-        onChange={(id) => setAktifSekme(id)}
-      />
+            {/* Ekranın Altında Yüzen Sıvı Cam Navigasyon Barı */}
+      <div className="fixed bottom-5 inset-x-0 mx-auto z-50 w-[92vw] max-w-[380px] pointer-events-auto">
+        <motion.nav
+          className="relative p-1.5 select-none overflow-hidden rounded-full"
+          style={{
+            backgroundColor: "rgba(255, 255, 255, 0.02)",
+            backdropFilter: "blur(10px) saturate(210%) contrast(105%)",
+            WebkitBackdropFilter: "blur(24px) saturate(210%) contrast(105%)",
+            border: "1px solid rgba(255, 255, 255, 0.28)",
+            boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.50), inset 0 -1px 1px rgba(0, 0, 0, 0.05)"
+          }}
+        >
+          <div className="relative flex items-center w-full h-[44px]">
+            {SEKMELER.map((item) => {
+              const aktif = aktifSekme === item.id;
+              const Ikon = item.ikon;
+              const rozetGoster = item.id === 'duyurular' && okunmamisDuyuruVar;
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setAktifSekme(item.id)}
+                  className="relative z-10 flex-1 h-full flex flex-col items-center justify-center rounded-full cursor-pointer transition-transform duration-150 active:scale-95"
+                >
+                  {aktif && (
+                    <motion.div
+                      layoutId="ogrenci-active-mercury"
+                      className="absolute inset-0 rounded-full z-0"
+                      style={{
+                        backgroundColor: "rgba(27, 67, 50, 0.20)",
+                        border: "1px solid rgba(27, 67, 50, 0.35)",
+                        boxShadow: "0 2px 8px rgba(27, 67, 50, 0.10), inset 0 1px 1px rgba(255, 255, 255, 0.45)"
+                      }}
+                      transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                    />
+                  )}
+
+                  <div className="relative z-10 flex flex-col items-center justify-center gap-0.5">
+                    <div className="relative">
+                      <Ikon
+                        className={`size-4.5 transition-transform duration-200 ${aktif ? "scale-105" : "scale-100"}`}
+                        style={{
+                          color: aktif ? "#1b4332" : "rgba(30, 41, 59, 0.70)",
+                          strokeWidth: aktif ? 2.3 : 1.85
+                        }}
+                      />
+                      {rozetGoster && (
+                        <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-red-500 border border-white" />
+                      )}
+                    </div>
+                    <span
+                      className={`text-[10px] tracking-tight leading-none text-center whitespace-nowrap transition-all duration-200 ${aktif ? "font-semibold" : "font-medium"}`}
+                      style={{ color: aktif ? "#1b4332" : "rgba(30, 41, 59, 0.70)" }}
+                    >
+                      {item.ad}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </motion.nav>
+      </div>
 
       {secilenRozet && (
         <div
