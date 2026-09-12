@@ -31,11 +31,18 @@ export default function GirisPage() {
       return
     }
 
-    const { data: kullanici } = await supabase
+    const { data: kullanici, error: kullaniciHata } = await supabase
       .from('kullanicilar')
       .select('rol')
       .eq('id', data.user.id)
       .single()
+
+    if (kullaniciHata || !kullanici) {
+      await supabase.auth.signOut()
+      setHata(kullaniciHata?.message || 'Hesap yetkilendirme kaydı bulunamadı.')
+      setYukleniyor(false)
+      return
+    }
 
     if (kullanici?.rol === 'super_admin' || kullanici?.rol === 'program_admin') {
       router.push('/admin')

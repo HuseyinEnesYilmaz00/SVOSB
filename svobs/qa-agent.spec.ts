@@ -7,10 +7,16 @@ const BASE_URL =
   process.env.SVOBS_URL ||
   'https://symmetrical-system-4qj4x5j45559f7v99-3001.app.github.dev';
 
+function requiredEnv(name: string) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} ortam değişkeni gerekli.`);
+  return value;
+}
+
 const ROLES = [
-  { name: 'admin',    email: 'superadmin@siyervakfi.com',   password: '12345678' },
-  { name: 'ogretmen', email: 'm.cahitsahinler@gmail.com',   password: '12345678' },
-  { name: 'ogrenci',  email: 'huseyinenesyilmaz@gmail.com', password: '12345678' },
+  { name: 'admin', email: requiredEnv('SVOBS_QA_ADMIN_EMAIL'), password: requiredEnv('SVOBS_QA_ADMIN_PASSWORD') },
+  { name: 'ogretmen', email: requiredEnv('SVOBS_QA_OGRETMEN_EMAIL'), password: requiredEnv('SVOBS_QA_OGRETMEN_PASSWORD') },
+  { name: 'ogrenci', email: requiredEnv('SVOBS_QA_OGRENCI_EMAIL'), password: requiredEnv('SVOBS_QA_OGRENCI_PASSWORD') },
 ];
 
 // Her rolün gezeceği route'lar — şimdilik tek sayfa, sonra alt sayfalar eklenebilir

@@ -74,6 +74,9 @@
   --primary: oklch(0.35 0.08 155);
   --primary-foreground: oklch(0.985 0.008 95);
   --ring: oklch(0.35 0.08 155);
+  --tema-accent: #1b4332;
+  --tema-accent-hover: #143326;
+  --tema-accent-rgb: 27, 67, 50;
 }
 
 /* Esma teması */
@@ -81,6 +84,34 @@
   --primary: oklch(0.45 0.16 5);
   --primary-foreground: oklch(0.985 0.008 95);
   --ring: oklch(0.45 0.16 5);
+  --tema-accent: #a53860;
+  --tema-accent-hover: #8f2f52;
+  --tema-accent-rgb: 165, 56, 96;
+}
+
+/* Esma programinda ortak yesil utility renkleri de program rengine uyar. */
+.tema-esma .text-green-600,
+.tema-esma .text-green-700,
+.tema-esma .text-emerald-600,
+.tema-esma .text-emerald-700 {
+  color: var(--tema-accent) !important;
+}
+
+.tema-esma .hover\:text-green-800:hover,
+.tema-esma .hover\:text-emerald-800:hover {
+  color: var(--tema-accent-hover) !important;
+}
+
+.tema-esma .bg-green-100,
+.tema-esma .bg-emerald-50,
+.tema-esma .bg-emerald-600 {
+  background-color: rgba(var(--tema-accent-rgb), 0.1) !important;
+}
+
+.tema-esma .border-green-300,
+.tema-esma .border-emerald-100,
+.tema-esma .border-emerald-600 {
+  border-color: rgba(var(--tema-accent-rgb), 0.25) !important;
 }
 
 /* Bunu .tema-esma { ... } bloğunun hemen altına yapıştır dostum */
@@ -147,8 +178,8 @@
 
 
 .glass-btn-primary:hover {
-  background-color: rgba(27, 67, 50, 0.95);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), 0 12px 24px -4px rgba(27, 67, 50, 0.45);
+  background-color: var(--tema-accent-hover);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), 0 12px 24px -4px rgba(var(--tema-accent-rgb), 0.45);
 }
 .glass-btn-primary:active {
   transform: scale(0.96);
@@ -229,16 +260,16 @@
   font-weight: 600 !important;
   color: #ffffff !important;
   border-radius: 1rem !important;
-  background-color: #1b4332 !important;
-  border: 1px solid rgba(45, 106, 79, 0.6) !important;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(27, 67, 50, 0.25) !important;
+  background-color: var(--tema-accent) !important;
+  border: 1px solid rgba(var(--tema-accent-rgb), 0.6) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(var(--tema-accent-rgb), 0.25) !important;
   transition: all 0.15s ease !important;
   cursor: pointer !important;
   user-select: none !important;
 }
 .glass-btn-primary:hover {
-  background-color: #143326 !important;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), 0 6px 18px rgba(27, 67, 50, 0.35) !important;
+  background-color: var(--tema-accent-hover) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), 0 6px 18px rgba(var(--tema-accent-rgb), 0.35) !important;
 }
 .glass-btn-primary:active {
   transform: scale(0.96) !important;
@@ -320,12 +351,12 @@
 .animate-modal select:focus,
 .animate-modal textarea:focus {
   background-color: rgba(255, 255, 255, 0.95) !important;
-  border-color: rgba(27, 67, 50, 0.5) !important;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02), 0 0 0 3px rgba(27, 67, 50, 0.12) !important;
+  border-color: rgba(var(--tema-accent-rgb), 0.5) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02), 0 0 0 3px rgba(var(--tema-accent-rgb), 0.12) !important;
 }
 
 .animate-modal input[type="checkbox"] {
-  accent-color: #1b4332 !important;
+  accent-color: var(--tema-accent) !important;
   width: 1.05rem !important;
   height: 1.05rem !important;
   border-radius: 0.35rem !important;

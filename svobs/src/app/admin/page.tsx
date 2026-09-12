@@ -1,24 +1,20 @@
 'use client'
+// Glass tasarım sistemine geçirildi: ui.* token'ları + glass-btn-primary/secondary,
+// tüm modallar ui.modalOverlay/modalCard'a taşındı (mobilde kenara yapışmasın diye p-4 eklendi),
+// sekme + modal geçişlerine framer-motion animasyonu eklendi.
+// Header, program seçici ve alt dock (referans glass) dokunulmadı.
 import { toast } from 'sonner'
 
-import { programTema, temaBg, temaAccent, temaHover, temaPrimary } from '@/lib/tema'
+import { programTema } from '@/lib/tema'
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { ui } from '@/lib/ui'
-import { Button } from '@/components/ui/button'
 import ExportButton from '@/components/ui/ExportButton'; // kendi path'ine göre ayarla
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { motion, AnimatePresence } from "framer-motion"
-import { FloatingDock, DockItem } from "@/components/FloatingDock"
-import { Users, BookOpen, CalendarCheck, FileCheck, MoreHorizontal, X, GraduationCap, FileText, Bell, Award, LayoutDashboard, Download, KeyRound, LogOut, Database, FileSpreadsheet } from "lucide-react"
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import { DockItem } from "@/components/FloatingDock"
+import { Users, BookOpen, CalendarCheck, FileCheck, MoreHorizontal, X, GraduationCap, FileText, Bell, Award, LayoutDashboard, Download } from "lucide-react"
 import { guncelDonem, guncelAkademikDonem } from '@/lib/donem'
-
-
-
 
 const ADMIN_ANA_SEKMELER: DockItem[] = [
   { id: "ogrenciler", ad: "Öğrenciler", ikon: Users },
@@ -64,12 +60,18 @@ export default function AdminPage() {
     };
   }, [digerAcik]);
   const [yukleniyor, setYukleniyor] = useState(true)
+  const [hata, setHata] = useState('')
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
     async function yukle() {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user }, error: oturumHata } = await supabase.auth.getUser()
+      if (oturumHata) {
+        setHata(`Oturum doğrulanamadı: ${oturumHata.message}`)
+        setYukleniyor(false)
+        return
+      }
       if (!user) { router.push('/giris'); return }
 
       const { data: k } = await supabase
@@ -87,16 +89,33 @@ export default function AdminPage() {
       let programSorgu = supabase.from('programlar').select('*').order('ad')
 
       if (k.rol === 'program_admin') {
-        const { data: kp } = await supabase
+        const { data: kp, error: kpHata } = await supabase
           .from('kullanici_programlar')
           .select('program_id')
           .eq('kullanici_id', user.id)
 
+        if (kpHata) {
+          setHata(`Program yetkileri yüklenemedi: ${kpHata.message}`)
+          setYukleniyor(false)
+          return
+        }
+
         const izinliIdler = (kp || []).map((x: any) => x.program_id)
+        if (izinliIdler.length === 0) {
+          setHata('Bu admin hesabına henüz bir program yetkisi tanımlanmamış.')
+          setYukleniyor(false)
+          return
+        }
         programSorgu = programSorgu.in('id', izinliIdler)
       }
 
-      const { data: p } = await programSorgu
+      const { data: p, error: programHata } = await programSorgu
+
+      if (programHata) {
+        setHata(`Programlar yüklenemedi: ${programHata.message}`)
+      } else if (!p || p.length === 0) {
+        setHata('Bu admin hesabının görüntüleyebileceği program bulunamadı.')
+      }
 
       if (p && p.length > 0) {
         setProgramlar(p)
@@ -121,17 +140,19 @@ export default function AdminPage() {
     )
   }
 
-  const sekmeler = [
-    { id: 'ogrenciler', ad: 'Öğrenciler' },
-    { id: 'siniflar', ad: 'Sınıflar' },
-    { id: 'dersler', ad: 'Dersler' },
-    { id: 'yoklama', ad: 'Devam' },
-    { id: 'notlar', ad: 'Notlar' },
-    { id: 'odevler', ad: 'Ödevler' },
-    { id: 'duyurular', ad: 'Duyurular' },
-    { id: 'hocalar', ad: 'Hocalar' },
-    { id: 'genelbakis', ad: 'Genel Bakış' },
-  ]
+  if (hata) {
+    return (
+      <div className="min-h-svh bg-background flex items-center justify-center px-4">
+        <div className="w-full max-w-md rounded-2xl border border-destructive/20 bg-card p-6 text-center shadow-sm">
+          <p className="text-sm font-medium text-foreground">Admin paneli açılamadı</p>
+          <p className="mt-2 text-sm text-muted-foreground">{hata}</p>
+          <button type="button" onClick={cikisYap} className="mt-5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+            Çıkış yap
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const tema = programTema(aktifProgram?.ad || '')
 
@@ -157,7 +178,7 @@ export default function AdminPage() {
         </div>
       </header>
 
-      {/* Program Seçici - Sıvı Cam Segmentli Ray */}
+      {/* Program Seçici - Sıvı Cam Segmentli Ray (referans glass, değişmedi) */}
       {programlar.length > 1 && (
         <div className="px-4 sm:px-6 pt-3 pb-2 flex items-center justify-start sm:justify-center overflow-x-auto">
           <div 
@@ -176,13 +197,19 @@ export default function AdminPage() {
                   onClick={() => setAktifProgram(p)}
                   className={`relative px-4 py-1.5 rounded-xl text-xs font-semibold tracking-tight transition-all duration-200 cursor-pointer whitespace-nowrap active:scale-95 flex items-center gap-2 ${
                     aktif
-                      ? "text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_6px_16px_-2px_rgba(27,67,50,0.35)] border border-[#2d6a4f]/60"
+                      ? "text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_6px_16px_-2px_rgba(0,0,0,0.16)] border border-white/40"
                       : "text-slate-600 hover:text-slate-900 hover:bg-white/60 border border-transparent"
                   }`}
-                  style={aktif ? { backgroundColor: "#1b4332" } : {}}
+                    style={aktif ? { backgroundColor: "var(--tema-accent)" } : {}}
                 >
                   {aktif && (
-                    <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+                    <span
+                      className="size-1.5 rounded-full"
+                      style={{
+                        backgroundColor: "var(--tema-accent)",
+                        boxShadow: "0 0 8px rgba(var(--tema-accent-rgb), 0.6)"
+                      }}
+                    />
                   )}
                   <span>{p.ad}</span>
                 </button>
@@ -193,36 +220,46 @@ export default function AdminPage() {
       )}
 
       <main className="p-4 sm:p-6 max-w-7xl mx-auto pb-32">
-        {aktifSekme === "ogrenciler" && (
-          <OgrencilerSekme programId={aktifProgram?.id} supabase={supabase} tema={tema} />
-        )}
-        {aktifSekme === "siniflar" && (
-          <SiniflarSekme programId={aktifProgram?.id} supabase={supabase} />
-        )}
-        {aktifSekme === "dersler" && (
-          <DerslerSekme programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
-        )}
-        {aktifSekme === "yoklama" && (
-          <YoklamaSekmesi programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
-        )}
-        {aktifSekme === "notlar" && (
-          <NotlarSekmesi programId={aktifProgram?.id} supabase={supabase} />
-        )}
-        {aktifSekme === "odevler" && (
-          <OdevlerSekmesi programId={aktifProgram?.id} supabase={supabase} />
-        )}
-        {aktifSekme === "duyurular" && (
-          <DuyurularSekmesi programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
-        )}
-        {aktifSekme === "hocalar" && (
-          <HocalarSekme programId={aktifProgram?.id} supabase={supabase} />
-        )}
-        {aktifSekme === "genelbakis" && (
-          <GenelBakisSekmesi programId={aktifProgram?.id} supabase={supabase} tema={tema} />
-        )}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={aktifSekme}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+          >
+            {aktifSekme === "ogrenciler" && (
+              <OgrencilerSekme programId={aktifProgram?.id} supabase={supabase} tema={tema} />
+            )}
+            {aktifSekme === "siniflar" && (
+              <SiniflarSekme programId={aktifProgram?.id} supabase={supabase} />
+            )}
+            {aktifSekme === "dersler" && (
+              <DerslerSekme programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
+            )}
+            {aktifSekme === "yoklama" && (
+              <YoklamaSekmesi programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
+            )}
+            {aktifSekme === "notlar" && (
+              <NotlarSekmesi programId={aktifProgram?.id} supabase={supabase} />
+            )}
+            {aktifSekme === "odevler" && (
+              <OdevlerSekmesi programId={aktifProgram?.id} supabase={supabase} />
+            )}
+            {aktifSekme === "duyurular" && (
+              <DuyurularSekmesi programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
+            )}
+            {aktifSekme === "hocalar" && (
+              <HocalarSekme programId={aktifProgram?.id} supabase={supabase} />
+            )}
+            {aktifSekme === "genelbakis" && (
+              <GenelBakisSekmesi programId={aktifProgram?.id} supabase={supabase} tema={tema} />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
-      {/* Yukarıya Doğru Akışkan Esneyen Tek Parça Sıvı Cam Dock */}
+      {/* Yukarıya Doğru Akışkan Esneyen Tek Parça Sıvı Cam Dock — referans glass, değişmedi */}
       <div>
         <div ref={dockRef} className="fixed bottom-5 inset-x-0 mx-auto z-50 w-[92vw] max-w-[380px] pointer-events-auto">
           <motion.nav
@@ -240,7 +277,6 @@ export default function AdminPage() {
               boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.50), inset 0 -1px 1px rgba(0, 0, 0, 0.05)"
             }}
           >
-            {/* Üst Katman: 3x2 Izgara + Hesap Alanı */}
             <AnimatePresence>
               {digerAcik && (
                 <motion.div
@@ -281,7 +317,6 @@ export default function AdminPage() {
                     })}
                   </div>
 
-                  {/* Alt Katman: Profil, Şifre ve Çıkış */}
                   <div className="mt-1 pt-2 px-2 border-t border-white/10 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="size-7 rounded-full bg-primary/20 border border-primary/30 text-primary flex items-center justify-center text-[11px] font-bold shrink-0">
@@ -317,7 +352,6 @@ export default function AdminPage() {
               )}
             </AnimatePresence>
 
-            {/* Alt Katman: 44px Tam Merkeze Oturan 5 Buton */}
             <div className="relative flex items-center w-full h-[44px]">
               {ADMIN_ANA_SEKMELER.map((item) => {
                 const aktif = (aktifSekme === item.id) || (item.id === "diger" && (digerAcik || DIGER_SEKMELER.some(d => d.id === aktifSekme)));
@@ -342,9 +376,9 @@ export default function AdminPage() {
                         layoutId="admin-active-mercury"
                         className="absolute inset-0 rounded-full z-0"
                         style={{
-                          backgroundColor: "rgba(27, 67, 50, 0.20)",
-                          border: "1px solid rgba(27, 67, 50, 0.35)",
-                          boxShadow: "0 2px 8px rgba(27, 67, 50, 0.10), inset 0 1px 1px rgba(255, 255, 255, 0.45)"
+                          backgroundColor: "rgba(var(--tema-accent-rgb), 0.20)",
+                          border: "1px solid rgba(var(--tema-accent-rgb), 0.35)",
+                          boxShadow: "0 2px 8px rgba(var(--tema-accent-rgb), 0.10), inset 0 1px 1px rgba(255, 255, 255, 0.45)"
                         }}
                         transition={{ type: "spring", stiffness: 350, damping: 28 }}
                       />
@@ -354,14 +388,14 @@ export default function AdminPage() {
                       <Ikon 
                         className={`size-4.5 transition-transform duration-200 ${aktif ? "scale-105" : "scale-100"}`}
                         style={{
-                          color: aktif ? "#1b4332" : "rgba(30, 41, 59, 0.70)",
+                          color: aktif ? "var(--tema-accent)" : "rgba(30, 41, 59, 0.70)",
                           strokeWidth: aktif ? 2.3 : 1.85
                         }}
                       />
                       <span
                         className={`text-[10px] tracking-tight leading-none text-center whitespace-nowrap transition-all duration-200 ${aktif ? "font-semibold" : "font-medium"}`}
                         style={{
-                          color: aktif ? "#1b4332" : "rgba(30, 41, 59, 0.70)"
+                          color: aktif ? "var(--tema-accent)" : "rgba(30, 41, 59, 0.70)"
                         }}
                       >
                         {item.id === "diger" && digerAcik ? "Kapat" : item.ad}
@@ -374,7 +408,6 @@ export default function AdminPage() {
           </motion.nav>
         </div>
 
-        {/* Dışa Aktar Modalı */}
         <ExportButton 
           izinliProgramIdler={aktifProgram ? [aktifProgram.id] : []} 
           disaAktarAcik={disaAktarAcik} 
@@ -395,7 +428,6 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
   const [kaydediyor, setKaydediyor] = useState(false)
   const [arsivGoster, setArsivGoster] = useState(false)
 
-  // GEÇMİŞ MODAL STATELERİ
   const [gecmisModalAcik, setGecmisModalAcik] = useState(false)
   const [secilenArsivSinif, setSecilenArsivSinif] = useState<any>(null)
   const [gecmisNotlar, setGecmisNotlar] = useState<any[]>([])
@@ -481,14 +513,12 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
     })
   }
 
-  // GEÇMİŞİ GETİR FONKSİYONU
   async function gecmisiIncele(s: any) {
     setSecilenArsivSinif(s)
     setGecmisModalAcik(true)
     setGecmisYukleniyor(true)
     setGecmisSekme('notlar')
 
-    // 1. Sınıfın derslerini bul
     const { data: dersData } = await supabase.from('dersler').select('id, ad').eq('sinif_id', s.id)
     const dersIdleri = dersData?.map((d: any) => d.id) || []
 
@@ -499,11 +529,9 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
       return
     }
 
-    // 2. Derslere ait Notları ve Yoklamaları çek
     const { data: nData } = await supabase.from('notlar').select('*').in('ders_id', dersIdleri).order('tarih', { ascending: false })
     const { data: yData } = await supabase.from('yoklamalar').select('*').in('ders_id', dersIdleri).order('tarih', { ascending: false })
 
-    // 3. İlgili Öğrencilerin detaylarını çek
     const ogrIdleri = new Set<string>()
     nData?.forEach((n: any) => ogrIdleri.add(n.ogrenci_id))
     yData?.forEach((y: any) => ogrIdleri.add(y.ogrenci_id))
@@ -513,7 +541,6 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
       const kullIdleri = ogrData?.map((o: any) => o.kullanici_id).filter(Boolean) || []
       const { data: kullData } = await supabase.from('kullanicilar').select('id, ad, soyad').in('id', kullIdleri)
 
-      // Verileri birleştir (Zenginleştirme)
       const zenginNotlar = (nData || []).map((n: any) => {
         const ders = dersData?.find((d: any) => d.id === n.ders_id)
         const ogrenci = ogrData?.find((o: any) => o.id === n.ogrenci_id)
@@ -547,7 +574,6 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
     setGecmisYukleniyor(false)
   }
 
-  // Duruma göre rozet renkleri
   const durumRozet = (durum: string) => {
     switch(durum) {
       case 'katildi': return 'bg-green-100 text-green-700'
@@ -572,22 +598,22 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
 
   return (
     <div>
-      <div className="bg-white rounded-xl shadow-sm">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800">
+      <div className={ui.card}>
+        <div className={ui.cardHeader}>
+          <p className={ui.cardTitle}>
             {arsivGoster ? 'Arşivlenen Sınıflar' : 'Sınıflar'}
-          </h2>
-          <div className="flex items-center gap-2">
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setArsivGoster(!arsivGoster)}
-              className="text-xs border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50"
+              className="glass-btn-secondary"
             >
               {arsivGoster ? 'Aktif Sınıflar' : 'Arşivlenenleri Gör'}
             </button>
             {!arsivGoster && (
               <button
                 onClick={() => setModalAcik(true)}
-                className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80"
+                className="glass-btn-primary"
               >
                 + Sınıf Ekle
               </button>
@@ -596,17 +622,17 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
         </div>
 
         {siniflar.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">
+          <div className={ui.cardEmpty}>
             {arsivGoster ? 'Arşivlenmiş sınıf bulunmuyor.' : 'Henüz sınıf eklenmemiş veya tümü arşivlenmiş.'}
           </div>
           ) : (
           <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 text-left">
+            <thead className={ui.tableHead}>
               <tr>
-                <th className="px-4 py-3 text-xs text-gray-500">Sınıf Adı</th>
-                <th className="px-4 py-3 text-xs text-gray-500">Dönem</th>
-                <th className="px-4 py-3 text-xs text-gray-500">İşlem</th>
+                <th className={`${ui.tableHeadCell} px-4 py-3`}>Sınıf Adı</th>
+                <th className={`${ui.tableHeadCell} px-4 py-3`}>Dönem</th>
+                <th className={`${ui.tableHeadCell} px-4 py-3`}>İşlem</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -615,18 +641,18 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
                   <td className="px-4 py-3 text-sm font-medium text-gray-800">{s.ad}</td>
                   <td className="px-4 py-3 text-sm text-gray-500">{guncelDonem(s.donem)}</td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 flex-wrap">
                       {!arsivGoster ? (
                         <>
                           <button
                             onClick={() => sinifArsivle(s.id)}
-                            className="text-blue-600 text-xs hover:text-blue-800"
+                            className="text-blue-600 text-xs font-medium hover:text-blue-800"
                           >
                             Arşivle
                           </button>
                           <button
                             onClick={() => sinifSil(s.id)}
-                            className="text-red-500 text-xs hover:text-red-700"
+                            className={ui.btnDanger}
                           >
                             Sil
                           </button>
@@ -641,13 +667,13 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
                           </button>
                           <button
                             onClick={() => sinifArsivdenCikar(s.id)}
-                            className="text-green-600 text-xs hover:text-green-800"
+                            className="text-green-600 text-xs font-medium hover:text-green-800"
                           >
                             Çıkar
                           </button>
                           <button
                             onClick={() => sinifSil(s.id)}
-                            className="text-red-500 text-xs hover:text-red-700"
+                            className={ui.btnDanger}
                           >
                             Sil
                           </button>
@@ -664,155 +690,171 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
       </div>
 
       {/* GEÇMİŞİ İNCELE MODAL'I */}
-      {gecmisModalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-overlay">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl h-[85vh] flex flex-col animate-modal">
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b flex items-center justify-between shrink-0">
-              <div>
-                <h3 className="font-semibold text-gray-800 text-lg">
+      <AnimatePresence>
+        {gecmisModalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.97, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={`${ui.modalCard} w-full max-w-5xl h-[85vh] flex flex-col`}
+            >
+              <div className={`${ui.modalHeader} shrink-0 flex items-center justify-between`}>
+                <p className={ui.modalTitle}>
                   {secilenArsivSinif?.ad} <span className="text-sm font-normal text-gray-500 ml-2">Arşiv Kayıtları</span>
-                </h3>
+                </p>
+                <button onClick={() => setGecmisModalAcik(false)} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
               </div>
-              <button onClick={() => setGecmisModalAcik(false)} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
-            </div>
-            
-            {/* Modal Content */}
-            <div className="flex-1 overflow-hidden flex flex-col">
-              {gecmisYukleniyor ? (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-gray-500">Kayıtlar toplanıyor...</p>
-                </div>
-              ) : (
-                <>
-                  {/* Modal Sekmeleri */}
-                  <div className="px-6 flex gap-1 border-b shrink-0 bg-gray-50 pt-2">
-                    <button
-                      onClick={() => setGecmisSekme('notlar')}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
-                        gecmisSekme === 'notlar' ? 'border-[#344e41] text-[#344e41]' : 'border-transparent text-gray-500 hover:text-gray-700'
-                      }`}
-                    >
-                      Geçmiş Notlar ({gecmisNotlar.length})
-                    </button>
-                    <button
-                      onClick={() => setGecmisSekme('yoklamalar')}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
-                        gecmisSekme === 'yoklamalar' ? 'border-[#344e41] text-[#344e41]' : 'border-transparent text-gray-500 hover:text-gray-700'
-                      }`}
-                    >
-                      Geçmiş Yoklamalar ({gecmisYoklamalar.length})
-                    </button>
-                  </div>
 
-                  {/* Tablo Alanı */}
-                  <div className="flex-1 overflow-y-auto p-6 bg-white">
-                    {gecmisSekme === 'notlar' && (
-                      gecmisNotlar.length === 0 ? <p className="text-center text-gray-400 mt-10">Bu sınıfa ait girilmiş not bulunmuyor.</p> : (
-                        <table className="w-full text-left text-sm">
-                          <thead className="bg-gray-50 text-gray-500 sticky top-0">
-                            <tr>
-                              <th className="py-3 px-4 font-medium border-b">Tarih</th>
-                              <th className="py-3 px-4 font-medium border-b">Ders</th>
-                              <th className="py-3 px-4 font-medium border-b">Başlık</th>
-                              <th className="py-3 px-4 font-medium border-b">Öğrenci</th>
-                              <th className="py-3 px-4 font-medium border-b text-right">Puan</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {gecmisNotlar.map((n, idx) => (
-                              <tr key={idx} className="hover:bg-gray-50">
-                                <td className="py-3 px-4 text-gray-500">{new Date(n.tarih).toLocaleDateString('tr-TR')}</td>
-                                <td className="py-3 px-4">{n.dersAd}</td>
-                                <td className="py-3 px-4">{n.baslik}</td>
-                                <td className="py-3 px-4">#{n.ogrenciNo} {n.ogrenciAdSoyad}</td>
-                                <td className="py-3 px-4 text-right font-medium">{n.puan}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )
-                    )}
-
-                    {gecmisSekme === 'yoklamalar' && (
-                      gecmisYoklamalar.length === 0 ? <p className="text-center text-gray-400 mt-10">Bu sınıfa ait yoklama kaydı bulunmuyor.</p> : (
-                        <table className="w-full text-left text-sm">
-                          <thead className="bg-gray-50 text-gray-500 sticky top-0">
-                            <tr>
-                              <th className="py-3 px-4 font-medium border-b">Tarih</th>
-                              <th className="py-3 px-4 font-medium border-b">Ders</th>
-                              <th className="py-3 px-4 font-medium border-b">Öğrenci</th>
-                              <th className="py-3 px-4 font-medium border-b text-right">Durum</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {gecmisYoklamalar.map((y, idx) => (
-                              <tr key={idx} className="hover:bg-gray-50">
-                                <td className="py-3 px-4 text-gray-500">{new Date(y.tarih).toLocaleDateString('tr-TR')}</td>
-                                <td className="py-3 px-4">{y.dersAd}</td>
-                                <td className="py-3 px-4">#{y.ogrenciNo} {y.ogrenciAdSoyad}</td>
-                                <td className="py-3 px-4 text-right">
-                                  <span className={`px-2 py-1 rounded text-xs font-medium ${durumRozet(y.durum)}`}>
-                                    {durumEtiket(y.durum)}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )
-                    )}
+              <div className="flex-1 overflow-hidden flex flex-col">
+                {gecmisYukleniyor ? (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-gray-500">Kayıtlar toplanıyor...</p>
                   </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+                ) : (
+                  <>
+                    <div className="px-6 flex gap-1 border-b shrink-0 bg-gray-50 pt-2 overflow-x-auto">
+                      <button
+                        onClick={() => setGecmisSekme('notlar')}
+                        className={`px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap ${
+                          gecmisSekme === 'notlar' ? 'border-[#344e41] text-[#344e41]' : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        Geçmiş Notlar ({gecmisNotlar.length})
+                      </button>
+                      <button
+                        onClick={() => setGecmisSekme('yoklamalar')}
+                        className={`px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap ${
+                          gecmisSekme === 'yoklamalar' ? 'border-[#344e41] text-[#344e41]' : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        Geçmiş Yoklamalar ({gecmisYoklamalar.length})
+                      </button>
+                    </div>
+
+                    <div className="flex-1 overflow-auto p-6 bg-white">
+                      {gecmisSekme === 'notlar' && (
+                        gecmisNotlar.length === 0 ? <p className="text-center text-gray-400 mt-10">Bu sınıfa ait girilmiş not bulunmuyor.</p> : (
+                          <table className="w-full text-left text-sm">
+                            <thead className="bg-gray-50 text-gray-500 sticky top-0">
+                              <tr>
+                                <th className="py-3 px-4 font-medium border-b">Tarih</th>
+                                <th className="py-3 px-4 font-medium border-b">Ders</th>
+                                <th className="py-3 px-4 font-medium border-b">Başlık</th>
+                                <th className="py-3 px-4 font-medium border-b">Öğrenci</th>
+                                <th className="py-3 px-4 font-medium border-b text-right">Puan</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {gecmisNotlar.map((n, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50">
+                                  <td className="py-3 px-4 text-gray-500">{new Date(n.tarih).toLocaleDateString('tr-TR')}</td>
+                                  <td className="py-3 px-4">{n.dersAd}</td>
+                                  <td className="py-3 px-4">{n.baslik}</td>
+                                  <td className="py-3 px-4">#{n.ogrenciNo} {n.ogrenciAdSoyad}</td>
+                                  <td className="py-3 px-4 text-right font-medium">{n.puan}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )
+                      )}
+
+                      {gecmisSekme === 'yoklamalar' && (
+                        gecmisYoklamalar.length === 0 ? <p className="text-center text-gray-400 mt-10">Bu sınıfa ait yoklama kaydı bulunmuyor.</p> : (
+                          <table className="w-full text-left text-sm">
+                            <thead className="bg-gray-50 text-gray-500 sticky top-0">
+                              <tr>
+                                <th className="py-3 px-4 font-medium border-b">Tarih</th>
+                                <th className="py-3 px-4 font-medium border-b">Ders</th>
+                                <th className="py-3 px-4 font-medium border-b">Öğrenci</th>
+                                <th className="py-3 px-4 font-medium border-b text-right">Durum</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {gecmisYoklamalar.map((y, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50">
+                                  <td className="py-3 px-4 text-gray-500">{new Date(y.tarih).toLocaleDateString('tr-TR')}</td>
+                                  <td className="py-3 px-4">{y.dersAd}</td>
+                                  <td className="py-3 px-4">#{y.ogrenciNo} {y.ogrenciAdSoyad}</td>
+                                  <td className="py-3 px-4 text-right">
+                                    <span className={`px-2 py-1 rounded text-xs font-medium ${durumRozet(y.durum)}`}>
+                                      {durumEtiket(y.durum)}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* YENİ SINIF EKLE MODAL'I */}
-      {modalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-4">Yeni Sınıf Ekle</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Sınıf Adı</label>
-                <input
-                  value={yeniAd}
-                  onChange={(e) => setYeniAd(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="örn: Grup A, İleri Seviye..."
-                />
+      <AnimatePresence>
+        {modalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Yeni Sınıf Ekle</p>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Dönem</label>
-                <input
-                  value={yeniDonem}
-                  onChange={(e) => setYeniDonem(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="örn: 2024-2025"
-                />
+              <div className={`${ui.modalBody} space-y-3`}>
+                <div>
+                  <label className={ui.label}>Sınıf Adı</label>
+                  <input
+                    value={yeniAd}
+                    onChange={(e) => setYeniAd(e.target.value)}
+                    className={`${ui.select} w-full`}
+                    placeholder="örn: Grup A, İleri Seviye..."
+                  />
+                </div>
+                <div>
+                  <label className={ui.label}>Dönem</label>
+                  <input
+                    value={yeniDonem}
+                    onChange={(e) => setYeniDonem(e.target.value)}
+                    className={`${ui.select} w-full`}
+                    placeholder="örn: 2024-2025"
+                  />
+                </div>
               </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button
-                onClick={() => setModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50"
-              >
-                İptal
-              </button>
-              <button
-                onClick={sinifEkle}
-                disabled={kaydediyor}
-                className="glass-btn-secondary"
-              >
-                {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              <div className={ui.modalFooter}>
+                <button
+                  onClick={() => setModalAcik(false)}
+                  className={`${ui.btnSecondary} flex-1`}
+                >
+                  İptal
+                </button>
+                <button
+                  onClick={sinifEkle}
+                  disabled={kaydediyor}
+                  className="glass-btn-primary flex-1"
+                >
+                  {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -1016,7 +1058,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
             <p className={ui.cardTitle}>Öğrenciler</p>
             <p className="text-xs text-gray-400 mt-0.5">{ogrenciler.filter(o => o.aktif).length} kayıtlı öğrenci</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setPasifGoster(!pasifGoster)}
               className="glass-btn-secondary"
@@ -1082,7 +1124,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-3 justify-end">
+                      <div className="flex items-center gap-3 justify-end flex-wrap">
                         {o.aktif ? (
                           <>
                             <button onClick={() => { setSecilenOgrenci(o); setSorumlulukModalAcik(true) }} className={ui.btnGhost}>Sorumluluk</button>
@@ -1091,7 +1133,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
                           </>
                         ) : (
                           <>
-                            <button onClick={() => ogrenciAktifEt(o)} className="text-green-600 text-xs hover:text-green-800">Aktif Et</button>
+                            <button onClick={() => ogrenciAktifEt(o)} className="text-green-600 text-xs font-medium hover:text-green-800">Aktif Et</button>
                             <button onClick={() => ogrenciKaliciSil(o)} className={ui.btnDanger}>Kalıcı Sil</button>
                           </>
                         )}
@@ -1106,114 +1148,143 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
       </div>
 
       {/* Öğrenci Ekle Modal */}
-      {/* Öğrenci Ekle Modal */}
-      {modalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-4">Yeni Öğrenci</h3>
-            {siniflar.length === 0 ? (
-              <p className="text-sm text-amber-600">Önce bir sınıf oluşturman lazım!</p>
-            ) : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">Ad</label>
-                    <input value={form.ad} onChange={(e) => setForm({...form, ad: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" placeholder="Ad" />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">Soyad</label>
-                    <input value={form.soyad} onChange={(e) => setForm({...form, soyad: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" placeholder="Soyad" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Email</label>
-                  <input type="email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" placeholder="ornek@mail.com" />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Telefon</label>
-                  <input value={form.telefon} onChange={(e) => setForm({...form, telefon: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" placeholder="05xx xxx xx xx" />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Sınıf</label>
-                  <select value={form.sinif_id} onChange={(e) => setForm({...form, sinif_id: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
-                    <option value="">Sınıf seç...</option>
-                    {siniflar.map((s) => <option key={s.id} value={s.id}>{s.ad}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Geçici Şifre</label>
-                  <input type="password" value={form.sifre} onChange={(e) => setForm({...form, sifre: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" placeholder="En az 6 karakter" />
-                </div>
+      <AnimatePresence>
+        {modalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Yeni Öğrenci</p>
               </div>
-            )}
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setModalAcik(false)} className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">İptal</button>
-              {siniflar.length > 0 && (
-                <button onClick={ogrenciEkle} disabled={kaydediyor} className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
-                  {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
-                </button>
+              {siniflar.length === 0 ? (
+                <div className={ui.modalBody}>
+                  <p className="text-sm text-amber-600">Önce bir sınıf oluşturman lazım!</p>
+                </div>
+              ) : (
+                <div className={`${ui.modalBody} space-y-3`}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={ui.label}>Ad</label>
+                      <input value={form.ad} onChange={(e) => setForm({...form, ad: e.target.value})} className={`${ui.select} w-full`} placeholder="Ad" />
+                    </div>
+                    <div>
+                      <label className={ui.label}>Soyad</label>
+                      <input value={form.soyad} onChange={(e) => setForm({...form, soyad: e.target.value})} className={`${ui.select} w-full`} placeholder="Soyad" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={ui.label}>Email</label>
+                    <input type="email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} className={`${ui.select} w-full`} placeholder="ornek@mail.com" />
+                  </div>
+                  <div>
+                    <label className={ui.label}>Telefon</label>
+                    <input value={form.telefon} onChange={(e) => setForm({...form, telefon: e.target.value})} className={`${ui.select} w-full`} placeholder="05xx xxx xx xx" />
+                  </div>
+                  <div>
+                    <label className={ui.label}>Sınıf</label>
+                    <select value={form.sinif_id} onChange={(e) => setForm({...form, sinif_id: e.target.value})} className={`${ui.select} w-full`}>
+                      <option value="">Sınıf seç...</option>
+                      {siniflar.map((s) => <option key={s.id} value={s.id}>{s.ad}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={ui.label}>Geçici Şifre</label>
+                    <input type="password" value={form.sifre} onChange={(e) => setForm({...form, sifre: e.target.value})} className={`${ui.select} w-full`} placeholder="En az 6 karakter" />
+                  </div>
+                </div>
               )}
-            </div>
-          </div>
-        </div>
-      )}
+              <div className={ui.modalFooter}>
+                <button onClick={() => setModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>İptal</button>
+                {siniflar.length > 0 && (
+                  <button onClick={ogrenciEkle} disabled={kaydediyor} className="glass-btn-primary flex-1">
+                    {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Sorumluluk Modal */}
-      {sorumlulukModalAcik && (
-        <div className={ui.modalOverlay}>
-          <div className={ui.modalCard}>
-            <div className={ui.modalHeader}>
-              <p className={ui.modalTitle}>Sorumluluk Ata</p>
-              <p className="text-xs text-gray-400 mt-0.5">{secilenOgrenci?.kullanicilar?.ad} {secilenOgrenci?.kullanicilar?.soyad}</p>
-            </div>
-            <div className={ui.modalBody}>
-              <div>
-                <label className={ui.label}>Ders Seç</label>
-                <select value={secilenSorumlulukDers} onChange={(e) => setSecilenSorumlulukDers(e.target.value)} className={`${ui.select} w-full`}>
-                  <option value="">Ders seç...</option>
-                  {tumDersler.map((d) => <option key={d.id} value={d.id}>{d.ad} — {d.siniflar?.ad}</option>)}
-                </select>
+      <AnimatePresence>
+        {sorumlulukModalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Sorumluluk Ata</p>
+                <p className="text-xs text-gray-400 mt-0.5">{secilenOgrenci?.kullanicilar?.ad} {secilenOgrenci?.kullanicilar?.soyad}</p>
               </div>
-            </div>
-            <div className={ui.modalFooter}>
-              <div className={ui.modalFooter}>
-              <button onClick={() => setSorumlulukModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>İptal</button>
-              <button onClick={sorumlulukAta} disabled={!secilenSorumlulukDers} className="flex-1 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-medium hover:bg-primary/80 transition-all active:scale-95 disabled:opacity-50">Ata</button>
-            </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Şifre Değiştir Modal */}
-      {sifreModalAcik && (
-        <div className={ui.modalOverlay}>
-          <div className={ui.modalCard}>
-            <div className={ui.modalHeader}>
-              <p className={ui.modalTitle}>Şifre Değiştir</p>
-              <p className="text-xs text-gray-400 mt-0.5">{sifreHedefOgrenci?.ad}</p>
-            </div>
-            <div className={ui.modalBody}>
-              <div>
-                <label className={ui.label}>Yeni Şifre</label>
-                <input
-                  type="password"
-                  value={yeniSifreDegeri}
-                  onChange={(e) => setYeniSifreDegeri(e.target.value)}
-                  className={`${ui.select} w-full`}
-                  placeholder="En az 6 karakter"
-                />
+              <div className={ui.modalBody}>
+                <div>
+                  <label className={ui.label}>Ders Seç</label>
+                  <select value={secilenSorumlulukDers} onChange={(e) => setSecilenSorumlulukDers(e.target.value)} className={`${ui.select} w-full`}>
+                    <option value="">Ders seç...</option>
+                    {tumDersler.map((d) => <option key={d.id} value={d.id}>{d.ad} — {d.siniflar?.ad}</option>)}
+                  </select>
+                </div>
               </div>
-            </div>
-            <div className={ui.modalFooter}>
               <div className={ui.modalFooter}>
-              <button onClick={() => setSifreModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>İptal</button>
-              <button onClick={sifreSifirlaKaydet} className="flex-1 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-medium hover:bg-primary/80 transition-all active:scale-95">Kaydet</button>
-            </div>
-            </div>
-          </div>
-        </div>
-      )}
+                <button onClick={() => setSorumlulukModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>İptal</button>
+                <button onClick={sorumlulukAta} disabled={!secilenSorumlulukDers} className="glass-btn-primary flex-1">Ata</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
+      {/* Şifre Değiştir Modal */}
+      <AnimatePresence>
+        {sifreModalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Şifre Değiştir</p>
+                <p className="text-xs text-gray-400 mt-0.5">{sifreHedefOgrenci?.ad}</p>
+              </div>
+              <div className={ui.modalBody}>
+                <div>
+                  <label className={ui.label}>Yeni Şifre</label>
+                  <input
+                    type="password"
+                    value={yeniSifreDegeri}
+                    onChange={(e) => setYeniSifreDegeri(e.target.value)}
+                    className={`${ui.select} w-full`}
+                    placeholder="En az 6 karakter"
+                  />
+                </div>
+              </div>
+              <div className={ui.modalFooter}>
+                <button onClick={() => setSifreModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>İptal</button>
+                <button onClick={sifreSifirlaKaydet} className="glass-btn-primary flex-1">Kaydet</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -1356,57 +1427,52 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
 
   return (
     <div>
-      {/* Sınıf Seçici */}
       {siniflar.length === 0 ? (
         <div className="bg-white rounded-xl p-6 text-amber-600">
           Önce Sınıflar sekmesinden bir sınıf oluştur!
         </div>
       ) : (
         <>
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
             {siniflar.map((s) => (
               <button
                 key={s.id}
                 onClick={() => setSecilenSinif(s)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
-                  secilenSinif?.id === s.id
-                    ? 'bg-gray-800 text-white'
-                    : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
-                }`}
+                className={secilenSinif?.id === s.id ? 'glass-btn-primary shrink-0' : 'glass-btn-secondary shrink-0'}
               >
                 {s.ad}
               </button>
             ))}
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="font-semibold text-gray-800">
+          <div className={ui.card}>
+            <div className={ui.cardHeader}>
+              <p className={ui.cardTitle}>
                 {secilenSinif?.ad} — Dersler
-              </h2>
+              </p>
               <button
                 onClick={() => setModalAcik(true)}
-                className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80"
+                className="glass-btn-primary"
               >
                 + Ders Ekle
               </button>
             </div>
 
             {dersler.length === 0 ? (
-              <div className="p-8 text-center text-gray-400">
+              <div className={ui.cardEmpty}>
                 Bu sınıfa henüz ders eklenmemiş
               </div>
             ) : (
               <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 text-left">
+                <thead className={ui.tableHead}>
                   <tr>
-                    <th className="px-4 py-3 text-xs text-gray-500">Ders Adı</th>
-                    <th className="px-4 py-3 text-xs text-gray-500">Gün</th>
-                    <th className="px-4 py-3 text-xs text-gray-500">Saat</th>
-                    <th className="px-4 py-3 text-xs text-gray-500">Periyot</th>
-                    <th className="px-4 py-3 text-xs text-gray-500">Hoca</th>
-                    <th className="px-4 py-3 text-xs text-gray-500">İşlem</th>
+                    <th className={`${ui.tableHeadCell} px-4 py-3`}>Ders Adı</th>
+                    <th className={`${ui.tableHeadCell} px-4 py-3`}>Gün</th>
+                    <th className={`${ui.tableHeadCell} px-4 py-3`}>Saat</th>
+                    <th className={`${ui.tableHeadCell} px-4 py-3`}>Periyot</th>
+                    <th className={`${ui.tableHeadCell} px-4 py-3`}>Hoca</th>
+                    <th className={`${ui.tableHeadCell} px-4 py-3`}>İşlem</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1425,22 +1491,22 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
                         }
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
                           <button
                             onClick={() => { setIptalDersi(d); setIptalModalAcik(true) }}
-                            className="text-amber-600 text-xs hover:text-amber-800"
+                            className="text-amber-600 text-xs font-medium hover:text-amber-800"
                           >
                             İptal Et
                           </button>
                           <button
                             onClick={() => { setTelafiDersi(d); setTelafiModalAcik(true) }}
-                            className="text-blue-600 text-xs hover:text-blue-800"
+                            className="text-blue-600 text-xs font-medium hover:text-blue-800"
                           >
                             Telafi Ekle
                           </button>
                           <button
                             onClick={() => dersSil(d.id)}
-                            className="text-red-500 text-xs hover:text-red-700"
+                            className={ui.btnDanger}
                           >
                             Sil
                           </button>
@@ -1456,135 +1522,164 @@ function DerslerSekme({ programId, supabase, kullanici }: { programId: string, s
         </>
       )}
 
-      {modalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-4">Yeni Ders Ekle</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Ders Adı</label>
-                <input value={form.ad} onChange={(e) => setForm({...form, ad: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="örn: Kitap Müzakeresi" />
+      <AnimatePresence>
+        {modalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Yeni Ders Ekle</p>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Açıklama (isteğe bağlı)</label>
-                <input value={form.aciklama} onChange={(e) => setForm({...form, aciklama: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="Kısa açıklama..." />
-              </div>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600 mb-1">Gün</label>
-                  <select value={form.gun} onChange={(e) => setForm({...form, gun: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
-                    <option value="">Seç...</option>
-                    {gunler.map(g => <option key={g} value={g}>{g}</option>)}
+              <div className={`${ui.modalBody} space-y-3`}>
+                <div>
+                  <label className={ui.label}>Ders Adı</label>
+                  <input value={form.ad} onChange={(e) => setForm({...form, ad: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="örn: Kitap Müzakeresi" />
+                </div>
+                <div>
+                  <label className={ui.label}>Açıklama (isteğe bağlı)</label>
+                  <input value={form.aciklama} onChange={(e) => setForm({...form, aciklama: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="Kısa açıklama..." />
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className={ui.label}>Gün</label>
+                    <select value={form.gun} onChange={(e) => setForm({...form, gun: e.target.value})}
+                      className={`${ui.select} w-full`}>
+                      <option value="">Seç...</option>
+                      {gunler.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className={ui.label}>Saat</label>
+                    <input type="time" value={form.saat} onChange={(e) => setForm({...form, saat: e.target.value})}
+                      className={`${ui.select} w-full`} />
+                  </div>
+                </div>
+                <div>
+                  <label className={ui.label}>Periyot</label>
+                  <select value={form.periyot} onChange={(e) => setForm({...form, periyot: e.target.value})}
+                    className={`${ui.select} w-full`}>
+                    {periyotlar.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                   </select>
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600 mb-1">Saat</label>
-                  <input type="time" value={form.saat} onChange={(e) => setForm({...form, saat: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
+                {form.periyot !== 'haftalik' && (
+                  <div>
+                    <label className={ui.label}>Başlangıç Tarihi (ilk ders günü)</label>
+                    <input type="date" value={form.baslangic_tarihi} onChange={(e) => setForm({...form, baslangic_tarihi: e.target.value})}
+                      className={`${ui.select} w-full`} />
+                  </div>
+                )}
               </div>
-                <div>
-                <label className="block text-sm text-gray-600 mb-1">Periyot</label>
-                <select value={form.periyot} onChange={(e) => setForm({...form, periyot: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
-                  {periyotlar.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                </select>
+              <div className={ui.modalFooter}>
+                <button onClick={() => setModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>
+                  İptal
+                </button>
+                <button onClick={dersEkle} disabled={kaydediyor} className="glass-btn-primary flex-1">
+                  {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
+                </button>
               </div>
-              {form.periyot !== 'haftalik' && (
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Başlangıç Tarihi (ilk ders günü)</label>
-                  <input type="date" value={form.baslangic_tarihi} onChange={(e) => setForm({...form, baslangic_tarihi: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
-                İptal
-              </button>
-              <button onClick={dersEkle} disabled={kaydediyor}
-                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50"
-                >
-                {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    
-    
-    {iptalModalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-1">Ders İptal Et</h3>
-            <p className="text-sm text-gray-500 mb-4">{iptalDersi?.ad}</p>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Tarih</label>
-                <input type="date" value={iptalTarih} onChange={(e) => setIptalTarih(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Gerekçe</label>
-                <textarea value={iptalGerekce} onChange={(e) => setIptalGerekce(e.target.value)}
-                  rows={3}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
-                  placeholder="İptal nedeni..." />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setIptalModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
-                İptal
-              </button>
-              <button onClick={iptalKaydet}
-                className="flex-1 bg-amber-600 text-white py-2 rounded-lg text-sm hover:bg-amber-700">
-                Onayla
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {telafiModalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-1">Telafi Dersi Ekle</h3>
-            <p className="text-sm text-gray-500 mb-4">{telafiDersi?.ad}</p>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Tarih</label>
-                <input type="date" value={telafiTarih} onChange={(e) => setTelafiTarih(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      <AnimatePresence>
+        {iptalModalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Ders İptal Et</p>
+                <p className="text-sm text-gray-500 mt-0.5">{iptalDersi?.ad}</p>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Saat</label>
-                <input type="time" value={telafiSaat} onChange={(e) => setTelafiSaat(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className={`${ui.modalBody} space-y-3`}>
+                <div>
+                  <label className={ui.label}>Tarih</label>
+                  <input type="date" value={iptalTarih} onChange={(e) => setIptalTarih(e.target.value)}
+                    className={`${ui.select} w-full`} />
+                </div>
+                <div>
+                  <label className={ui.label}>Gerekçe</label>
+                  <textarea value={iptalGerekce} onChange={(e) => setIptalGerekce(e.target.value)}
+                    rows={3}
+                    className={`${ui.select} w-full resize-none`}
+                    placeholder="İptal nedeni..." />
+                </div>
               </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setTelafiModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
-                İptal
-              </button>
-              <button onClick={telafiKaydet}
-                className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700">
-                Ekle
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      </div>
+              <div className={ui.modalFooter}>
+                <button onClick={() => setIptalModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>
+                  İptal
+                </button>
+                <button onClick={iptalKaydet} className="flex-1 bg-amber-600 text-white py-2 rounded-xl text-sm font-medium hover:bg-amber-700 transition active:scale-95">
+                  Onayla
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {telafiModalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Telafi Dersi Ekle</p>
+                <p className="text-sm text-gray-500 mt-0.5">{telafiDersi?.ad}</p>
+              </div>
+              <div className={`${ui.modalBody} space-y-3`}>
+                <div>
+                  <label className={ui.label}>Tarih</label>
+                  <input type="date" value={telafiTarih} onChange={(e) => setTelafiTarih(e.target.value)}
+                    className={`${ui.select} w-full`} />
+                </div>
+                <div>
+                  <label className={ui.label}>Saat</label>
+                  <input type="time" value={telafiSaat} onChange={(e) => setTelafiSaat(e.target.value)}
+                    className={`${ui.select} w-full`} />
+                </div>
+              </div>
+              <div className={ui.modalFooter}>
+                <button onClick={() => setTelafiModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>
+                  İptal
+                </button>
+                <button onClick={telafiKaydet} className="flex-1 bg-blue-600 text-white py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition active:scale-95">
+                  Ekle
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
+
 // ===== HOCALAR =====
 function HocalarSekme({ programId, supabase }: { programId: string, supabase: any }) {
   const [hocalar, setHocalar] = useState<any[]>([])
@@ -1618,7 +1713,6 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
         const buProgramDersleri = tumDersleri.filter((od: any) => od.dersler?.siniflar?.program_id === programId)
         return { ...hoca, ogretmen_dersleri: buProgramDersleri, _tumDersSayisi: tumDersleri.length }
       })
-      // hiç dersi olmayan (yeni eklenmiş, henüz atama yapılmamış) hocaları da göster
       .filter((hoca: any) => hoca._tumDersSayisi === 0 || hoca.ogretmen_dersleri.length > 0)
 
     const { data: d } = await supabase
@@ -1708,19 +1802,19 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
 
   return (
     <div>
-      <div className="bg-white rounded-xl shadow-sm">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800">Hocalar</h2>
+      <div className={ui.card}>
+        <div className={ui.cardHeader}>
+          <p className={ui.cardTitle}>Hocalar</p>
           <button
             onClick={() => setModalAcik(true)}
-            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80"
+            className="glass-btn-primary"
           >
             + Hoca Ekle
           </button>
         </div>
 
         {hocalar.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">Henüz hoca eklenmemiş</div>
+          <div className={ui.cardEmpty}>Henüz hoca eklenmemiş</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {hocalar.map((h) => (
@@ -1730,16 +1824,16 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
                     <p className="font-medium text-gray-800">{h.ad} {h.soyad}</p>
                     <p className="text-sm text-gray-500">{h.email}</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <button
                       onClick={() => { setSecilenHoca(h); setDersModalAcik(true) }}
-                      className="text-sm text-green-700 border border-green-700 px-3 py-1 rounded-lg hover:bg-green-50"
+                      className={ui.btnGhost}
                     >
                       + Ders Ata
                     </button>
                     <button
                       onClick={() => hocaSil(h.id)}
-                      className="text-sm text-red-500 border border-red-300 px-3 py-1 rounded-lg hover:bg-red-50"
+                      className={ui.btnDanger}
                     >
                       Sil
                     </button>
@@ -1748,7 +1842,7 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
                 {h.ogretmen_dersleri?.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {h.ogretmen_dersleri.map((od: any) => (
-                      <span key={od.ders_id} className="flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-full">
+                      <span key={od.ders_id} className={`${ui.badgeGray} flex items-center gap-1`}>
                         {od.dersler?.ad} — {od.dersler?.siniflar?.ad}
                         <button
                           onClick={() => dersKaldir(h.id, od.ders_id)}
@@ -1766,90 +1860,108 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
         )}
       </div>
 
-      {/* Hoca Ekle Modal */}
-      {modalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-4">Yeni Hoca Ekle</h3>
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600 mb-1">Ad</label>
-                  <input value={form.ad} onChange={(e) => setForm({...form, ad: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                    placeholder="Ad" />
+      <AnimatePresence>
+        {modalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Yeni Hoca Ekle</p>
+              </div>
+              <div className={`${ui.modalBody} space-y-3`}>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className={ui.label}>Ad</label>
+                    <input value={form.ad} onChange={(e) => setForm({...form, ad: e.target.value})}
+                      className={`${ui.select} w-full`}
+                      placeholder="Ad" />
+                  </div>
+                  <div className="flex-1">
+                    <label className={ui.label}>Soyad</label>
+                    <input value={form.soyad} onChange={(e) => setForm({...form, soyad: e.target.value})}
+                      className={`${ui.select} w-full`}
+                      placeholder="Soyad" />
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600 mb-1">Soyad</label>
-                  <input value={form.soyad} onChange={(e) => setForm({...form, soyad: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                    placeholder="Soyad" />
+                <div>
+                  <label className={ui.label}>Email</label>
+                  <input value={form.email} onChange={(e) => setForm({...form, email: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="ornek@mail.com" />
+                </div>
+                <div>
+                  <label className={ui.label}>Telefon</label>
+                  <input value={form.telefon} onChange={(e) => setForm({...form, telefon: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="05xx xxx xx xx" />
+                </div>
+                <div>
+                  <label className={ui.label}>Geçici Şifre</label>
+                  <input type="password" value={form.sifre} onChange={(e) => setForm({...form, sifre: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="En az 6 karakter" />
                 </div>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Email</label>
-                <input value={form.email} onChange={(e) => setForm({...form, email: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="ornek@mail.com" />
+              <div className={ui.modalFooter}>
+                <button onClick={() => setModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>
+                  İptal
+                </button>
+                <button onClick={hocaEkle} disabled={kaydediyor} className="glass-btn-primary flex-1">
+                  {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
+                </button>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Telefon</label>
-                <input value={form.telefon} onChange={(e) => setForm({...form, telefon: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="05xx xxx xx xx" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Geçici Şifre</label>
-                <input type="password" value={form.sifre} onChange={(e) => setForm({...form, sifre: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="En az 6 karakter" />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
-                İptal
-              </button>
-              <button onClick={hocaEkle} disabled={kaydediyor}
-                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
-                {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Ders Ata Modal */}
-      {dersModalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-1">Ders Ata</h3>
-            <p className="text-sm text-gray-500 mb-4">{secilenHoca?.ad} {secilenHoca?.soyad}</p>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Ders Seç</label>
-              <select value={secilenDers} onChange={(e) => setSecilenDers(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
-                <option value="">Ders seç...</option>
-                {dersler.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.ad} — {d.siniflar?.ad}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setDersModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
-                İptal
-              </button>
-              <button onClick={dersAta} disabled={kaydediyor || !secilenDers}
-                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
-                {kaydediyor ? 'Atanıyor...' : 'Ata'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {dersModalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Ders Ata</p>
+                <p className="text-sm text-gray-500 mt-0.5">{secilenHoca?.ad} {secilenHoca?.soyad}</p>
+              </div>
+              <div className={ui.modalBody}>
+                <label className={ui.label}>Ders Seç</label>
+                <select value={secilenDers} onChange={(e) => setSecilenDers(e.target.value)}
+                  className={`${ui.select} w-full`}>
+                  <option value="">Ders seç...</option>
+                  {dersler.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.ad} — {d.siniflar?.ad}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className={ui.modalFooter}>
+                <button onClick={() => setDersModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>
+                  İptal
+                </button>
+                <button onClick={dersAta} disabled={kaydediyor || !secilenDers} className="glass-btn-primary flex-1">
+                  {kaydediyor ? 'Atanıyor...' : 'Ata'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -1976,8 +2088,7 @@ function YoklamaSekmesi({ programId, supabase, kullanici }: { programId: string,
 
   return (
     <div className="space-y-4">
-      {/* Filtreler */}
-      <div className="bg-white rounded-xl shadow-sm p-4 flex flex-wrap gap-4">
+      <div className={`${ui.card} p-4 flex flex-wrap gap-4`}>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Sınıf</label>
           <select
@@ -1986,7 +2097,7 @@ function YoklamaSekmesi({ programId, supabase, kullanici }: { programId: string,
               const s = siniflar.find(s => s.id === e.target.value)
               setSecilenSinif(s)
             }}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+            className={ui.select}
           >
             {siniflar.map(s => <option key={s.id} value={s.id}>{s.ad}</option>)}
           </select>
@@ -1999,7 +2110,7 @@ function YoklamaSekmesi({ programId, supabase, kullanici }: { programId: string,
               const d = dersler.find(d => d.id === e.target.value)
               setSecilenDers(d)
             }}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+            className={ui.select}
           >
             {dersler.map(d => <option key={d.id} value={d.id}>{d.ad}</option>)}
           </select>
@@ -2010,28 +2121,27 @@ function YoklamaSekmesi({ programId, supabase, kullanici }: { programId: string,
             type="date"
             value={tarih}
             onChange={(e) => setTarih(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+            className={ui.select}
           />
         </div>
       </div>
 
-      {/* Yoklama Listesi */}
-      <div className="bg-white rounded-xl shadow-sm">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800">
+      <div className={ui.card}>
+        <div className={ui.cardHeader}>
+          <p className={ui.cardTitle}>
             {secilenDers?.ad || 'Ders seç'} — {tarih}
-          </h2>
+          </p>
           <button
             onClick={kaydet}
             disabled={kaydediyor || ogrenciler.length === 0}
-            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50"
+            className="glass-btn-primary"
           >
             {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
           </button>
         </div>
 
         {ogrenciler.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">Bu sınıfta öğrenci yok</div>
+          <div className={ui.cardEmpty}>Bu sınıfta öğrenci yok</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {ogrenciler.map((o) => (
@@ -2173,7 +2283,7 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
     if (!sinavForm.baslik || !sinavForm.tarih) { toast('Başlık ve tarih zorunlu!'); return }
     setKaydediyor(true)
 
-    const { data: sinav } = await supabase.from('sinavlar').insert({
+    await supabase.from('sinavlar').insert({
       ders_id: secilenDers.id,
       baslik: sinavForm.baslik,
       tarih: sinavForm.tarih,
@@ -2181,9 +2291,8 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
       konum: sinavForm.konum || null,
       aciklama: sinavForm.aciklama || null,
       olusturan_id: kullaniciId
-    }).select().single()
+    })
 
-    // Otomatik duyuru
     const duyuruIcerik = `${secilenDers.ad} dersi için sınav duyurusu:\n\nBaşlık: ${sinavForm.baslik}\nTarih: ${new Date(sinavForm.tarih).toLocaleDateString('tr-TR')}${sinavForm.saat ? '\nSaat: ' + sinavForm.saat : ''}${sinavForm.konum ? '\nKonum: ' + sinavForm.konum : ''}${sinavForm.aciklama ? '\n\nAçıklama: ' + sinavForm.aciklama : ''}`
 
     await supabase.from('duyurular').insert({
@@ -2225,196 +2334,210 @@ function NotlarSekmesi({ programId, supabase }: { programId: string, supabase: a
 
   return (
     <div className="space-y-4">
-      {/* Filtreler */}
-      <div className="bg-white rounded-xl shadow-sm p-4 flex flex-wrap gap-4">
+      <div className={`${ui.card} p-4 flex flex-wrap gap-4`}>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Sınıf</label>
           <select value={secilenSinif?.id || ''} onChange={(e) => setSecilenSinif(siniflar.find(s => s.id === e.target.value))}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+            className={ui.select}>
             {siniflar.map(s => <option key={s.id} value={s.id}>{s.ad}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Ders</label>
           <select value={secilenDers?.id || ''} onChange={(e) => { setSecilenDers(dersler.find(d => d.id === e.target.value)); setSecilenSinav(null) }}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+            className={ui.select}>
             {dersler.map(d => <option key={d.id} value={d.id}>{d.ad}</option>)}
           </select>
         </div>
       </div>
 
-      {/* Sekmeler */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         {[
           { id: 'sinavlar', ad: 'Sınavlar' },
           { id: 'not_giris', ad: 'Not Girişi' },
           { id: 'gecmis', ad: 'Geçmiş Notlar' },
         ].map(s => (
           <button key={s.id} onClick={() => setSekme(s.id as any)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${sekme === s.id ? 'bg-primary text-primary-foreground' : 'bg-white text-gray-600 border border-gray-300'}`}>
+            className={sekme === s.id ? 'glass-btn-primary' : 'glass-btn-secondary'}>
             {s.ad}
           </button>
         ))}
       </div>
 
-      {/* Sınavlar */}
-      {sekme === 'sinavlar' && (
-        <div className="bg-white rounded-xl shadow-sm">
-          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-800">Sınavlar</h2>
-            <button onClick={() => setSinavModalAcik(true)}
-              className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80">
-              + Sınav Ekle
-            </button>
-          </div>
-          {sinavlar.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">Henüz sınav eklenmemiş</div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {sinavlar.map((s) => (
-                <div key={s.id} className="p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-gray-800">{s.baslik}</p>
-                    <span className="text-xs text-gray-400">{new Date(s.tarih).toLocaleDateString('tr-TR')}</span>
-                  </div>
-                  {s.saat && <p className="text-sm text-gray-500 mt-1">Saat: {s.saat}</p>}
-                  {s.konum && <p className="text-sm text-gray-500">Konum: {s.konum}</p>}
-                  {s.aciklama && <p className="text-sm text-gray-400 mt-1">{s.aciklama}</p>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Not Girişi */}
-      {sekme === 'not_giris' && (
-        <div className="bg-white rounded-xl shadow-sm">
-          <div className="p-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-800 mb-3">Not Girişi</h2>
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <label className="block text-xs text-gray-500 mb-1">Sınav Seç</label>
-                <select value={secilenSinav?.id || ''} onChange={(e) => setSecilenSinav(sinavlar.find(s => s.id === e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
-                  <option value="">Sınav seç...</option>
-                  {sinavlar.map(s => <option key={s.id} value={s.id}>{s.baslik} — {new Date(s.tarih).toLocaleDateString('tr-TR')}</option>)}
-                </select>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={sekme}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.16 }}
+        >
+          {sekme === 'sinavlar' && (
+            <div className={ui.card}>
+              <div className={ui.cardHeader}>
+                <p className={ui.cardTitle}>Sınavlar</p>
+                <button onClick={() => setSinavModalAcik(true)} className="glass-btn-primary">
+                  + Sınav Ekle
+                </button>
               </div>
-              <button onClick={notKaydet} disabled={kaydediyor || !secilenSinav}
-                className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50 mt-4">
-                {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
-              </button>
-            </div>
-          </div>
-          {ogrenciler.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">Bu sınıfta öğrenci yok</div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {ogrenciler.map((o) => (
-                <div key={o.id} className="px-4 py-3 flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-800">
-                    #{o.numara} {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
-                  </span>
-                  <input type="number" min="0" max="100"
-                    value={notlar[o.id] || ''}
-                    onChange={(e) => setNotlar(prev => ({ ...prev, [o.id]: e.target.value }))}
-                    className="w-20 border border-gray-300 rounded-lg px-3 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-600"
-                    placeholder="—" />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Geçmiş Notlar */}
-      {sekme === 'gecmis' && (
-        <div className="space-y-3">
-          {gecmisNotlar.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center text-gray-400">Henüz not girilmemiş</div>
-          ) : (
-            (() => {
-              const gruplu = gecmisNotlar.reduce((acc: any, n: any) => {
-                const key = n.sinav_id || n.baslik
-                if (!acc[key]) acc[key] = { baslik: n.baslik, tarih: n.tarih, notlar: [] }
-                acc[key].notlar.push(n)
-                return acc
-              }, {})
-              return Object.values(gruplu).map((grup: any) => (
-                <div key={grup.baslik + grup.tarih} className="bg-white rounded-xl shadow-sm">
-                  <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="font-medium text-gray-800">{grup.baslik}</h3>
-                    <span className="text-xs text-gray-400">{grup.tarih}</span>
-                  </div>
-                  <div className="divide-y divide-gray-100">
-                    {grup.notlar.map((n: any) => (
-                      <div key={n.id} className="px-4 py-3 flex items-center justify-between">
-                        <span className="text-sm text-gray-700">
-                         {n.ogrenciler?.kullanicilar?.ad} {n.ogrenciler?.kullanicilar?.soyad}
-                        </span>
-                        <span className="text-sm font-medium text-gray-800">{n.puan}</span>
+              {sinavlar.length === 0 ? (
+                <div className={ui.cardEmpty}>Henüz sınav eklenmemiş</div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {sinavlar.map((s) => (
+                    <div key={s.id} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium text-gray-800">{s.baslik}</p>
+                        <span className="text-xs text-gray-400">{new Date(s.tarih).toLocaleDateString('tr-TR')}</span>
                       </div>
-                    ))}
+                      {s.saat && <p className="text-sm text-gray-500 mt-1">Saat: {s.saat}</p>}
+                      {s.konum && <p className="text-sm text-gray-500">Konum: {s.konum}</p>}
+                      {s.aciklama && <p className="text-sm text-gray-400 mt-1">{s.aciklama}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {sekme === 'not_giris' && (
+            <div className={ui.card}>
+              <div className="p-4 border-b border-gray-100">
+                <p className={`${ui.cardTitle} mb-3`}>Not Girişi</p>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <label className={ui.label}>Sınav Seç</label>
+                    <select value={secilenSinav?.id || ''} onChange={(e) => setSecilenSinav(sinavlar.find(s => s.id === e.target.value))}
+                      className={`${ui.select} w-full`}>
+                      <option value="">Sınav seç...</option>
+                      {sinavlar.map(s => <option key={s.id} value={s.id}>{s.baslik} — {new Date(s.tarih).toLocaleDateString('tr-TR')}</option>)}
+                    </select>
+                  </div>
+                  <button onClick={notKaydet} disabled={kaydediyor || !secilenSinav} className="glass-btn-primary mt-4">
+                    {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
+                  </button>
+                </div>
+              </div>
+              {ogrenciler.length === 0 ? (
+                <div className={ui.cardEmpty}>Bu sınıfta öğrenci yok</div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {ogrenciler.map((o) => (
+                    <div key={o.id} className="px-4 py-3 flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-800">
+                        #{o.numara} {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
+                      </span>
+                      <input type="number" min="0" max="100"
+                        value={notlar[o.id] || ''}
+                        onChange={(e) => setNotlar(prev => ({ ...prev, [o.id]: e.target.value }))}
+                        className={`${ui.select} w-20 text-center`}
+                        placeholder="—" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {sekme === 'gecmis' && (
+            gecmisNotlar.length === 0 ? (
+              <div className={ui.card}>
+                <div className={ui.cardEmpty}>Henüz not girilmemiş</div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {(() => {
+                  const gruplu = gecmisNotlar.reduce((acc: any, n: any) => {
+                    const key = n.sinav_id || n.baslik
+                    if (!acc[key]) acc[key] = { baslik: n.baslik, tarih: n.tarih, notlar: [] }
+                    acc[key].notlar.push(n)
+                    return acc
+                  }, {})
+                  return Object.values(gruplu).map((grup: any) => (
+                    <div key={grup.baslik + grup.tarih} className={ui.card}>
+                      <div className={ui.cardHeader}>
+                        <p className={ui.cardTitle}>{grup.baslik}</p>
+                        <span className="text-xs text-gray-400">{grup.tarih}</span>
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {grup.notlar.map((n: any) => (
+                          <div key={n.id} className="px-4 py-3 flex items-center justify-between">
+                            <span className="text-sm text-gray-700">
+                             {n.ogrenciler?.kullanicilar?.ad} {n.ogrenciler?.kullanicilar?.soyad}
+                            </span>
+                            <span className="text-sm font-medium text-gray-800">{n.puan}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                })()}
+              </div>
+            )
+          )}
+        </motion.div>
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {sinavModalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Sınav Ekle</p>
+              </div>
+              <div className={`${ui.modalBody} space-y-3`}>
+                <div>
+                  <label className={ui.label}>Başlık</label>
+                  <input value={sinavForm.baslik} onChange={(e) => setSinavForm({...sinavForm, baslik: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="örn: 1. Dönem Sınavı" />
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className={ui.label}>Tarih</label>
+                    <input type="date" value={sinavForm.tarih} onChange={(e) => setSinavForm({...sinavForm, tarih: e.target.value})}
+                      className={`${ui.select} w-full`} />
+                  </div>
+                  <div className="flex-1">
+                    <label className={ui.label}>Saat</label>
+                    <input type="time" value={sinavForm.saat} onChange={(e) => setSinavForm({...sinavForm, saat: e.target.value})}
+                      className={`${ui.select} w-full`} />
                   </div>
                 </div>
-              ))
-            })()
-          )}
-        </div>
-      )}
-
-      {/* Sınav Ekle Modal */}
-      {sinavModalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-4">Sınav Ekle</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Başlık</label>
-                <input value={sinavForm.baslik} onChange={(e) => setSinavForm({...sinavForm, baslik: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="örn: 1. Dönem Sınavı" />
-              </div>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600 mb-1">Tarih</label>
-                  <input type="date" value={sinavForm.tarih} onChange={(e) => setSinavForm({...sinavForm, tarih: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+                <div>
+                  <label className={ui.label}>Konum</label>
+                  <input value={sinavForm.konum} onChange={(e) => setSinavForm({...sinavForm, konum: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="örn: Dershane, Online..." />
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600 mb-1">Saat</label>
-                  <input type="time" value={sinavForm.saat} onChange={(e) => setSinavForm({...sinavForm, saat: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+                <div>
+                  <label className={ui.label}>Açıklama (isteğe bağlı)</label>
+                  <textarea value={sinavForm.aciklama} onChange={(e) => setSinavForm({...sinavForm, aciklama: e.target.value})}
+                    rows={3}
+                    className={`${ui.select} w-full resize-none`}
+                    placeholder="Sınav hakkında ek bilgi..." />
                 </div>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Konum</label>
-                <input value={sinavForm.konum} onChange={(e) => setSinavForm({...sinavForm, konum: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="örn: Dershane, Online..." />
+              <div className={ui.modalFooter}>
+                <button onClick={() => setSinavModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>
+                  İptal
+                </button>
+                <button onClick={sinavEkle} disabled={kaydediyor} className="glass-btn-primary flex-1">
+                  {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
+                </button>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Açıklama (isteğe bağlı)</label>
-                <textarea value={sinavForm.aciklama} onChange={(e) => setSinavForm({...sinavForm, aciklama: e.target.value})}
-                  rows={3}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none"
-                  placeholder="Sınav hakkında ek bilgi..." />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setSinavModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
-                İptal
-              </button>
-              <button onClick={sinavEkle} disabled={kaydediyor}
-                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
-                {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -2603,36 +2726,34 @@ function OdevlerSekmesi({ programId, supabase }: { programId: string, supabase: 
 
   return (
     <div className="space-y-4">
-      {/* Filtreler */}
-      <div className="bg-white rounded-xl shadow-sm p-4 flex flex-wrap gap-4">
+      <div className={`${ui.card} p-4 flex flex-wrap gap-4`}>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Sınıf</label>
           <select value={secilenSinif?.id || ''} onChange={(e) => setSecilenSinif(siniflar.find(s => s.id === e.target.value))}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+            className={ui.select}>
             {siniflar.map(s => <option key={s.id} value={s.id}>{s.ad}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Ders</label>
           <select value={secilenDers?.id || ''} onChange={(e) => setSecilenDers(dersler.find(d => d.id === e.target.value))}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+            className={ui.select}>
             {dersler.map(d => <option key={d.id} value={d.id}>{d.ad}</option>)}
           </select>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800">Ödevler {secilenDers ? `— ${secilenDers.ad}` : ''}</h2>
-          <button onClick={() => setOdevModalAcik(true)} disabled={!secilenDers}
-            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
+      <div className={ui.card}>
+        <div className={ui.cardHeader}>
+          <p className={ui.cardTitle}>Ödevler {secilenDers ? `— ${secilenDers.ad}` : ''}</p>
+          <button onClick={() => setOdevModalAcik(true)} disabled={!secilenDers} className="glass-btn-primary disabled:opacity-50">
             + Ödev Ekle
           </button>
         </div>
         {!secilenDers ? (
-          <div className="p-8 text-center text-gray-400">Önce bir ders seç</div>
+          <div className={ui.cardEmpty}>Önce bir ders seç</div>
         ) : odevler.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">Henüz ödev eklenmemiş</div>
+          <div className={ui.cardEmpty}>Henüz ödev eklenmemiş</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {odevler.map((o) => (
@@ -2651,12 +2772,10 @@ function OdevlerSekmesi({ programId, supabase }: { programId: string, supabase: 
                   {o.aciklama && <p className="text-sm text-gray-400 mt-1">{o.aciklama}</p>}
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <button onClick={() => teslimleriAc(o)}
-                    className="text-primary text-sm hover:underline">
+                  <button onClick={() => teslimleriAc(o)} className={ui.btnGhost}>
                     Teslimler
                   </button>
-                  <button onClick={() => odevSil(o.id)}
-                    className="text-red-500 text-sm hover:text-red-700">
+                  <button onClick={() => odevSil(o.id)} className={ui.btnDanger}>
                     Sil
                   </button>
                 </div>
@@ -2666,131 +2785,152 @@ function OdevlerSekmesi({ programId, supabase }: { programId: string, supabase: 
         )}
       </div>
 
-      {odevModalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-4">Ödev Ekle — {secilenDers?.ad}</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Başlık</label>
-                <input value={odevForm.baslik} onChange={(e) => setOdevForm({...odevForm, baslik: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="örn: Siyer Kitabı Müzakeresi" />
+      <AnimatePresence>
+        {odevModalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Ödev Ekle</p>
+                <p className="text-xs text-gray-400 mt-0.5">{secilenDers?.ad}</p>
               </div>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600 mb-1">Tür</label>
-                  <select value={odevForm.tur} onChange={(e) => setOdevForm({...odevForm, tur: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
-                    <option value="kitap_muzakeresi">Kitap Müzakeresi</option>
-                    <option value="makale">Makale</option>
-                    <option value="diger">Diğer</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600 mb-1">Dönem</label>
-                  <input value={odevForm.donem} onChange={(e) => setOdevForm({...odevForm, donem: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                    placeholder="örn: 2025-2026 Güz" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Son Teslim Tarihi (isteğe bağlı)</label>
-                <input type="date" value={odevForm.son_teslim_tarihi} onChange={(e) => setOdevForm({...odevForm, son_teslim_tarihi: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Açıklama (isteğe bağlı)</label>
-                <textarea value={odevForm.aciklama} onChange={(e) => setOdevForm({...odevForm, aciklama: e.target.value})}
-                  rows={3}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none"
-                  placeholder="Ödev hakkında ek bilgi..." />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setOdevModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
-                İptal
-              </button>
-              <button onClick={odevEkle} disabled={kaydediyor}
-                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
-                {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {teslimModalAcik && (
-  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-    <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto animate-modal">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">{aktifOdev?.baslik} — Teslimler</h3>
-        <button onClick={() => setTeslimModalAcik(false)} className="text-gray-400 hover:text-gray-600">✕</button>
-      </div>
-
-      {teslimYukleniyor ? (
-        <p className="text-gray-500">Yükleniyor...</p>
-      ) : teslimler.length === 0 ? (
-        <p className="text-gray-500">Henüz teslim yok.</p>
-      ) : (
-        <div className="space-y-4">
-          {teslimler.map((t) => (
-            <div key={t.ogrenci_id} className="border rounded-lg p-4">
-              <div className="flex justify-between items-start mb-2">
+              <div className={`${ui.modalBody} space-y-3`}>
                 <div>
-                  <p className="font-medium">{t.ogrenciAdi}</p>
-                  <p className="text-sm text-gray-500">No: {t.ogrenciNo}</p>
+                  <label className={ui.label}>Başlık</label>
+                  <input value={odevForm.baslik} onChange={(e) => setOdevForm({...odevForm, baslik: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="örn: Siyer Kitabı Müzakeresi" />
                 </div>
-                <p className="text-sm text-gray-500">
-                  {new Date(t.teslim_tarihi).toLocaleDateString('tr-TR')}
-                </p>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className={ui.label}>Tür</label>
+                    <select value={odevForm.tur} onChange={(e) => setOdevForm({...odevForm, tur: e.target.value})}
+                      className={`${ui.select} w-full`}>
+                      <option value="kitap_muzakeresi">Kitap Müzakeresi</option>
+                      <option value="makale">Makale</option>
+                      <option value="diger">Diğer</option>
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className={ui.label}>Dönem</label>
+                    <input value={odevForm.donem} onChange={(e) => setOdevForm({...odevForm, donem: e.target.value})}
+                      className={`${ui.select} w-full`}
+                      placeholder="örn: 2025-2026 Güz" />
+                  </div>
+                </div>
+                <div>
+                  <label className={ui.label}>Son Teslim Tarihi (isteğe bağlı)</label>
+                  <input type="date" value={odevForm.son_teslim_tarihi} onChange={(e) => setOdevForm({...odevForm, son_teslim_tarihi: e.target.value})}
+                    className={`${ui.select} w-full`} />
+                </div>
+                <div>
+                  <label className={ui.label}>Açıklama (isteğe bağlı)</label>
+                  <textarea value={odevForm.aciklama} onChange={(e) => setOdevForm({...odevForm, aciklama: e.target.value})}
+                    rows={3}
+                    className={`${ui.select} w-full resize-none`}
+                    placeholder="Ödev hakkında ek bilgi..." />
+                </div>
               </div>
-
-              <details className="mb-3">
-                <summary className="cursor-pointer text-sm text-[#344e41]">Metni görüntüle</summary>
-                <div
-                  className="prose prose-sm max-w-none mt-2 border-t pt-2"
-                  dangerouslySetInnerHTML={{ __html: t.icerik_html || '' }}
-                />
-              </details>
-
-              
-              <a
-                href={`/api/odev-export-docx?id=${t.id}`}
-                className="text-sm text-[#344e41] hover:underline mb-3 inline-block"
-              >
-                Dosyayı indir (.docx)
-              </a>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  className="border rounded px-2 py-1 w-24"
-                  placeholder="Puan"
-                  value={puanlar[t.ogrenci_id] || ''}
-                  onChange={(e) =>
-                    setPuanlar((prev) => ({ ...prev, [t.ogrenci_id]: e.target.value }))
-                  }
-                />
-                <button
-                  onClick={() => notuKaydet(t.ogrenci_id, t.ders_id)}
-                  className="bg-[#344e41] text-white rounded px-3 py-1 text-sm hover:bg-[#344e41]"
-                >
-                  Kaydet
+              <div className={ui.modalFooter}>
+                <button onClick={() => setOdevModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>
+                  İptal
+                </button>
+                <button onClick={odevEkle} disabled={kaydediyor} className="glass-btn-primary flex-1">
+                  {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
                 </button>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  </div>
-)}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-    </div>
+      <AnimatePresence>
+        {teslimModalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={`${ui.modalCard} max-w-2xl max-h-[85vh] overflow-y-auto`}
+            >
+              <div className={ui.modalHeader}>
+                <div className="flex items-center justify-between">
+                  <p className={ui.modalTitle}>{aktifOdev?.baslik} — Teslimler</p>
+                  <button onClick={() => setTeslimModalAcik(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+              </div>
 
-    
+              <div className={ui.modalBody}>
+                {teslimYukleniyor ? (
+                  <p className="text-gray-500">Yükleniyor...</p>
+                ) : teslimler.length === 0 ? (
+                  <p className="text-gray-500">Henüz teslim yok.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {teslimler.map((t) => (
+                      <div key={t.ogrenci_id} className="border border-gray-200 rounded-xl p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <p className="font-medium">{t.ogrenciAdi}</p>
+                            <p className="text-sm text-gray-500">No: {t.ogrenciNo}</p>
+                          </div>
+                          <p className="text-sm text-gray-500">
+                            {new Date(t.teslim_tarihi).toLocaleDateString('tr-TR')}
+                          </p>
+                        </div>
+
+                        <details className="mb-3">
+                          <summary className="cursor-pointer text-sm text-[#344e41]">Metni görüntüle</summary>
+                          <div
+                            className="prose prose-sm max-w-none mt-2 border-t pt-2"
+                            dangerouslySetInnerHTML={{ __html: t.icerik_html || '' }}
+                          />
+                        </details>
+
+                        <a
+                          href={`/api/odev-export-docx?id=${t.id}`}
+                          className={`${ui.btnGhost} mb-3 inline-block`}
+                        >
+                          Dosyayı indir (.docx)
+                        </a>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            className={`${ui.select} w-24`}
+                            placeholder="Puan"
+                            value={puanlar[t.ogrenci_id] || ''}
+                            onChange={(e) =>
+                              setPuanlar((prev) => ({ ...prev, [t.ogrenci_id]: e.target.value }))
+                            }
+                          />
+                          <button
+                            onClick={() => notuKaydet(t.ogrenci_id, t.ders_id)}
+                            className="glass-btn-primary"
+                          >
+                            Kaydet
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
@@ -2862,7 +3002,6 @@ function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: strin
 
     toast.success('Duyuru yayınlandı')
 
-    // Mail gönder
     fetch('/api/duyuru-mail-gonder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2901,19 +3040,19 @@ function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: strin
 
   return (
     <div>
-      <div className="bg-white rounded-xl shadow-sm">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800">Duyurular</h2>
+      <div className={ui.card}>
+        <div className={ui.cardHeader}>
+          <p className={ui.cardTitle}>Duyurular</p>
           <button
             onClick={() => setModalAcik(true)}
-            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80"
+            className="glass-btn-primary"
           >
             + Duyuru Ekle
           </button>
         </div>
 
         {duyurular.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">Henüz duyuru eklenmemiş</div>
+          <div className={ui.cardEmpty}>Henüz duyuru eklenmemiş</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {duyurular.map((d) => (
@@ -2928,7 +3067,7 @@ function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: strin
                   </div>
                   <button
                     onClick={() => duyuruSil(d.id)}
-                    className="text-red-500 text-xs hover:text-red-700 shrink-0"
+                    className={`${ui.btnDanger} shrink-0`}
                   >
                     Sil
                   </button>
@@ -2939,91 +3078,103 @@ function DuyurularSekmesi({ programId, supabase, kullanici }: { programId: strin
         )}
       </div>
 
-      {modalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-4">Yeni Duyuru</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Başlık</label>
-                <input
-                  value={form.baslik}
-                  onChange={(e) => setForm({...form, baslik: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="Duyuru başlığı..."
-                />
+      <AnimatePresence>
+        {modalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className={`${ui.modalOverlay} p-4`}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Yeni Duyuru</p>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">İçerik</label>
-                <textarea
-                  value={form.icerik}
-                  onChange={(e) => setForm({...form, icerik: e.target.value})}
-                  rows={5}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none"
-                  placeholder="Duyuru içeriği..."
-                />
+              <div className={`${ui.modalBody} space-y-3`}>
+                <div>
+                  <label className={ui.label}>Başlık</label>
+                  <input
+                    value={form.baslik}
+                    onChange={(e) => setForm({...form, baslik: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="Duyuru başlığı..."
+                  />
+                </div>
+                <div>
+                  <label className={ui.label}>İçerik</label>
+                  <textarea
+                    value={form.icerik}
+                    onChange={(e) => setForm({...form, icerik: e.target.value})}
+                    rows={5}
+                    className={`${ui.select} w-full resize-none`}
+                    placeholder="Duyuru içeriği..."
+                  />
+                </div>
+                <div>
+                  <label className={ui.label}>Kime Gönderilsin?</label>
+                  <select
+                    value={form.hedefTipi}
+                    onChange={(e) => setForm({...form, hedefTipi: e.target.value, hedefSinifId: '', hedefKullaniciId: ''})}
+                    className={`${ui.select} w-full`}
+                  >
+                    <option value="tumu">Herkese</option>
+                    <option value="sinif">Belirli Sınıf</option>
+                    <option value="ogrenci">Belirli Öğrenci</option>
+                  </select>
+                </div>
+                {form.hedefTipi === 'sinif' && (
+                  <div>
+                    <label className={ui.label}>Sınıf Seç</label>
+                    <select
+                      value={form.hedefSinifId}
+                      onChange={(e) => setForm({...form, hedefSinifId: e.target.value})}
+                      className={`${ui.select} w-full`}
+                    >
+                      <option value="">Seçiniz...</option>
+                      {siniflar.map((s) => (
+                        <option key={s.id} value={s.id}>{s.ad}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {form.hedefTipi === 'ogrenci' && (
+                  <div>
+                    <label className={ui.label}>Öğrenci Seç</label>
+                    <select
+                      value={form.hedefKullaniciId}
+                      onChange={(e) => setForm({...form, hedefKullaniciId: e.target.value})}
+                      className={`${ui.select} w-full`}
+                    >
+                      <option value="">Seçiniz...</option>
+                      {ogrenciler.map((o) => (
+                        <option key={o.id} value={o.kullanici_id}>{o.kullanicilar?.ad} {o.kullanicilar?.soyad}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Kime Gönderilsin?</label>
-                <select
-                  value={form.hedefTipi}
-                  onChange={(e) => setForm({...form, hedefTipi: e.target.value, hedefSinifId: '', hedefKullaniciId: ''})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+              <div className={ui.modalFooter}>
+                <button
+                  onClick={() => setModalAcik(false)}
+                  className={`${ui.btnSecondary} flex-1`}
                 >
-                  <option value="tumu">Herkese</option>
-                  <option value="sinif">Belirli Sınıf</option>
-                  <option value="ogrenci">Belirli Öğrenci</option>
-                </select>
+                  İptal
+                </button>
+                <button
+                  onClick={duyuruEkle}
+                  disabled={kaydediyor}
+                  className="glass-btn-primary flex-1"
+                >
+                  {kaydediyor ? 'Yayınlanıyor...' : 'Yayınla'}
+                </button>
               </div>
-              {form.hedefTipi === 'sinif' && (
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Sınıf Seç</label>
-                  <select
-                    value={form.hedefSinifId}
-                    onChange={(e) => setForm({...form, hedefSinifId: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  >
-                    <option value="">Seçiniz...</option>
-                    {siniflar.map((s) => (
-                      <option key={s.id} value={s.id}>{s.ad}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {form.hedefTipi === 'ogrenci' && (
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Öğrenci Seç</label>
-                  <select
-                    value={form.hedefKullaniciId}
-                    onChange={(e) => setForm({...form, hedefKullaniciId: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  >
-                    <option value="">Seçiniz...</option>
-                    {ogrenciler.map((o) => (
-                      <option key={o.id} value={o.kullanici_id}>{o.kullanicilar?.ad} {o.kullanicilar?.soyad}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button
-                onClick={() => setModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50"
-              >
-                İptal
-              </button>
-              <button
-                onClick={duyuruEkle}
-                disabled={kaydediyor}
-                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50"
-              >
-                {kaydediyor ? 'Yayınlanıyor...' : 'Yayınla'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -3092,7 +3243,6 @@ function GenelBakisSekmesi({ programId, supabase, tema }: { programId: string, s
     })
   }
 
-  // ---- SINIF BAZLI ----
   const yoklamaSinifli = yoklamalar.map((y: any) => {
     const ders = dersler.find((d: any) => d.id === y.ders_id)
     const sinif = siniflar.find((s: any) => s.id === ders?.sinif_id)
@@ -3112,7 +3262,6 @@ function GenelBakisSekmesi({ programId, supabase, tema }: { programId: string, s
   })
   const sinifDetayVeri = durumOranlariHesapla(yoklamaSinifli, sinifTarihleri)
 
-  // ---- ÖĞRENCİ BAZLI: PDF formatı — ders x durum sayıları ----
   const secilenOgrenci = ogrenciler.find((o: any) => o.id === secilenOgrenciId)
   const ogrenciDersleri = secilenOgrenci ? dersler.filter((d: any) => d.sinif_id === secilenOgrenci.sinif_id) : []
   const ogrenciKayitlari = yoklamalar.filter((y: any) => y.ogrenci_id === secilenOgrenciId)
@@ -3131,7 +3280,6 @@ function GenelBakisSekmesi({ programId, supabase, tema }: { programId: string, s
   const ogrenciToplam = ogrenciKayitlari.length
   const ogrenciOzetYuzde = (durum: string) => ogrenciToplam > 0 ? Math.round((ogrenciKayitlari.filter((y: any) => y.durum === durum).length / ogrenciToplam) * 1000) / 10 : 0
 
-  // ---- DERS BAZLI ----
   const dersKayitlari = yoklamalar.filter((y: any) => y.ders_id === secilenDersId)
   const dersTarihleri = [...new Set(dersKayitlari.map((y: any) => y.tarih))].sort()
   const dersOzetVeri = dersTarihleri.map((tarih) => {
@@ -3157,9 +3305,9 @@ function GenelBakisSekmesi({ programId, supabase, tema }: { programId: string, s
   if (yukleniyor) return <p className="text-gray-500">Yükleniyor...</p>
 
   return (
-    <div className="bg-white rounded-xl shadow-sm p-4">
+    <div className={`${ui.card} p-4`}>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <h2 className="font-semibold text-gray-800">Devam Trendi</h2>
+        <p className={ui.cardTitle}>Devam Trendi</p>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
             {[{ id: 'sinif', ad: 'Sınıf' }, { id: 'ogrenci', ad: 'Öğrenci' }, { id: 'ders', ad: 'Ders' }].map((g) => (
@@ -3186,7 +3334,7 @@ function GenelBakisSekmesi({ programId, supabase, tema }: { programId: string, s
 
       {gruplama === 'ogrenci' && (
         <select value={secilenOgrenciId} onChange={(e) => { setSecilenOgrenciId(e.target.value); setDetayDersId('') }}
-          className="mb-4 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+          className={`${ui.select} mb-4`}>
           <option value="">Öğrenci seç...</option>
           {ogrenciler.map((o: any) => <option key={o.id} value={o.id}>{o.kullanicilar?.ad} {o.kullanicilar?.soyad}</option>)}
         </select>
@@ -3194,7 +3342,7 @@ function GenelBakisSekmesi({ programId, supabase, tema }: { programId: string, s
 
       {gruplama === 'ders' && (
         <select value={secilenDersId} onChange={(e) => setSecilenDersId(e.target.value)}
-          className="mb-4 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
+          className={`${ui.select} mb-4`}>
           <option value="">Ders seç...</option>
           {dersler.map((d: any) => {
             const sinif = siniflar.find((s: any) => s.id === d.sinif_id)
@@ -3203,9 +3351,8 @@ function GenelBakisSekmesi({ programId, supabase, tema }: { programId: string, s
         </select>
       )}
 
-      {/* SINIF */}
       {gruplama === 'sinif' && (
-        sinifTarihleri.length === 0 ? <div className="p-8 text-center text-gray-400">Henüz veri yok</div> : (
+        sinifTarihleri.length === 0 ? <div className={ui.cardEmpty}>Henüz veri yok</div> : (
           <ResponsiveContainer width="100%" height={320}>
             <LineChart data={gorunum === 'ozet' ? sinifOzetVeri : sinifDetayVeri}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -3226,10 +3373,9 @@ function GenelBakisSekmesi({ programId, supabase, tema }: { programId: string, s
         )
       )}
 
-      {/* ÖĞRENCİ — PDF formatı: ders x durum bar chart */}
       {gruplama === 'ogrenci' && (
-        !secilenOgrenciId ? <div className="p-8 text-center text-gray-400">Bir öğrenci seç</div> :
-        ogrenciDersVeri.length === 0 ? <div className="p-8 text-center text-gray-400">Bu öğrenci için veri yok</div> : (
+        !secilenOgrenciId ? <div className={ui.cardEmpty}>Bir öğrenci seç</div> :
+        ogrenciDersVeri.length === 0 ? <div className={ui.cardEmpty}>Bu öğrenci için veri yok</div> : (
           <>
             <p className="text-xs text-gray-500 mb-3">
               Toplam Ders Sayısı: {ogrenciToplam} — %{ogrenciOzetYuzde('katildi')} Devam, %{ogrenciOzetYuzde('gec')} Geç Katıldı, %{ogrenciOzetYuzde('izinli')} Mazeret, %{ogrenciOzetYuzde('katilmadi')} Katılmadı
@@ -3289,10 +3435,9 @@ function GenelBakisSekmesi({ programId, supabase, tema }: { programId: string, s
         )
       )}
 
-      {/* DERS */}
       {gruplama === 'ders' && (
-        !secilenDersId ? <div className="p-8 text-center text-gray-400">Bir ders seç</div> :
-        dersTarihleri.length === 0 ? <div className="p-8 text-center text-gray-400">Bu ders için veri yok</div> : (
+        !secilenDersId ? <div className={ui.cardEmpty}>Bir ders seç</div> :
+        dersTarihleri.length === 0 ? <div className={ui.cardEmpty}>Bu ders için veri yok</div> : (
           <ResponsiveContainer width="100%" height={320}>
             <LineChart data={gorunum === 'ozet' ? dersOzetVeri : dersOgrenciVeri}>
               <CartesianGrid strokeDasharray="3 3" />

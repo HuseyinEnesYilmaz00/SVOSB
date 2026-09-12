@@ -1,19 +1,16 @@
 'use client'
+// Glass tasarım sistemine geçirildi: ui.* token'ları + glass-btn-primary/secondary,
+// modallar ui.modalOverlay/modalCard'a taşındı, sekme + modal geçişlerine framer-motion animasyonu eklendi.
 import { toast } from 'sonner'
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { ui } from '@/lib/ui'
-import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import { FloatingDock, DockItem } from '@/components/FloatingDock'
+import { programTema } from '@/lib/tema'
+import { DockItem } from '@/components/FloatingDock'
 import { CalendarCheck, FileText, BookOpen, Bell } from 'lucide-react'
-
-
+import { motion, AnimatePresence } from 'framer-motion'
 
 const OGRETMEN_SEKMELER: DockItem[] = [
   { id: "yoklama", ad: "Yoklama", ikon: CalendarCheck },
@@ -30,7 +27,6 @@ export default function OgretmenPage() {
   const [yukleniyor, setYukleniyor] = useState(true)
   const router = useRouter()
   const supabase = createClient()
-
 
   useEffect(() => {
     async function yukle() {
@@ -57,20 +53,18 @@ export default function OgretmenPage() {
       if (dersIdleri.length > 0) {
         const { data: dd } = await supabase
           .from('dersler')
-          .select('id, ad, sinif_id, siniflar (id, ad, program_id)')
+          .select('id, ad, sinif_id, siniflar (id, ad, program_id, programlar (ad))')
           .in('id', dersIdleri)
-        
+
         dersDetaylari = (dd || []).map((ders: any) => ({
           ders_id: ders.id,
           dersler: ders
         }))
       }
 
-      
-
       setDersler(dersDetaylari)
       if (dersDetaylari.length > 0) setSecilenDers(dersDetaylari[0])
-      
+
       setYukleniyor(false)
     }
     yukle()
@@ -89,15 +83,10 @@ export default function OgretmenPage() {
     )
   }
 
-  const sekmeler = [
-    { id: 'yoklama', ad: 'Yoklama' },
-    { id: 'notlar', ad: 'Notlar' },
-    { id: 'odevler', ad: 'Ödevler' },
-    { id: 'duyurular', ad: 'Duyurular' },
-  ]
+  const tema = programTema(dersler[0]?.dersler?.siniflar?.programlar?.ad || '')
 
   return (
-    <div className="min-h-svh bg-background text-foreground transition-colors duration-200">
+    <div className={`tema-${tema} min-h-svh bg-background text-foreground transition-colors duration-200`}>
       <header className="border-b bg-card px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img src="/sv-logo.png" alt="Siyer Vakfı" className="w-15 h-15 object-contain brightness-0 dark:inverter" />
@@ -111,76 +100,176 @@ export default function OgretmenPage() {
             <p className="text-xs text-muted-foreground">Öğretmen</p>
           </div>
 
-          <div className="flex gap-2">
-            <a href="/sifre-degistir">
-              <Button variant="outline" size="sm">Şifre</Button>
+          <div className="flex gap-1.5">
+            <a
+              href="/sifre-degistir"
+              className="px-2.5 py-1 rounded-xl text-[10px] font-medium text-slate-700 bg-white/40 hover:bg-white/70 border border-white/60 shadow-sm transition active:scale-95"
+            >
+              Şifre
             </a>
-            <Button variant="outline" size="sm" onClick={cikisYap}>Çıkış</Button>
+            <button
+              type="button"
+              onClick={cikisYap}
+              className="px-2.5 py-1 rounded-xl text-[10px] font-medium text-red-600 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 shadow-sm transition active:scale-95 cursor-pointer"
+            >
+              Çıkış
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Ders Seçici */}
+      {/* Ders Seçici - Sıvı Cam Segmentli Ray (referans glass — değişmedi) */}
       {dersler.length > 1 && (
-        {/* Sekmeler FloatingDock a taşındı */}
+        <div className="px-4 sm:px-6 pt-3 pb-2 flex items-center justify-start sm:justify-center overflow-x-auto">
+          <div
+            className="inline-flex items-center gap-1.5 p-1.5 rounded-2xl border border-white/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),0_4px_20px_-4px_rgba(0,0,0,0.05)] select-none"
+            style={{
+              backgroundColor: "rgba(255, 255, 255, 0.50)",
+              backdropFilter: "blur(20px) saturate(190%)",
+              WebkitBackdropFilter: "blur(20px) saturate(190%)"
+            }}
+          >
+            {dersler.map((d) => {
+              const aktif = secilenDers?.ders_id === d.ders_id;
+              return (
+                <button
+                  key={d.ders_id}
+                  onClick={() => setSecilenDers(d)}
+                  className={`relative px-4 py-1.5 rounded-xl text-xs font-semibold tracking-tight transition-all duration-200 cursor-pointer whitespace-nowrap active:scale-95 flex items-center gap-2 ${
+                    aktif
+                      ? "text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_6px_16px_-2px_rgba(0,0,0,0.16)] border border-white/40"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-white/60 border border-transparent"
+                  }`}
+                  style={aktif ? { backgroundColor: "var(--tema-accent)" } : {}}
+                >
+                  {aktif && (
+                    <span
+                      className="size-1.5 rounded-full"
+                      style={{
+                        backgroundColor: "var(--tema-accent)",
+                        boxShadow: "0 0 8px rgba(var(--tema-accent-rgb), 0.6)"
+                      }}
+                    />
+                  )}
+                  <span>{d.dersler?.ad}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {dersler.length === 0 ? (
         <div className="p-8 text-center text-gray-400">Henüz size atanmış ders yok</div>
       ) : (
         <>
-          <div className="border-b bg-card px-6 flex gap-1">
-            {sekmeler.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setAktifSekme(s.id)}
-                className={`px-4 py-3 text-sm whitespace-nowrap border-b-2 transition ${
-                  aktifSekme === s.id
-                    ? 'border-green-700 text-green-700 font-medium'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
+          <div className="pb-28">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={aktifSekme}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
               >
-                {s.ad}
-              </button>
-            ))}
+                {aktifSekme === 'yoklama' && secilenDers && (
+                  <OgretmenYoklama
+                    dersId={secilenDers.ders_id}
+                    sinifId={secilenDers.dersler?.siniflar?.id}
+                    supabase={supabase}
+                    kullanici={kullanici}
+                  />
+                )}
+                {aktifSekme === 'notlar' && secilenDers && (
+                  <OgretmenNotlar
+                    dersId={secilenDers.ders_id}
+                    sinifId={secilenDers.dersler?.siniflar?.id}
+                    dersAd={secilenDers.dersler?.ad}
+                    supabase={supabase}
+                  />
+                )}
+                {aktifSekme === 'odevler' && secilenDers && (
+                  <OgretmenOdevler
+                    dersId={secilenDers.ders_id}
+                    sinifId={secilenDers.dersler?.siniflar?.id}
+                    dersAd={secilenDers.dersler?.ad}
+                    supabase={supabase}
+                    kullanici={kullanici}
+                  />
+                )}
+                {aktifSekme === 'duyurular' && secilenDers && (
+                  <OgretmenDuyurular
+                    dersId={secilenDers.ders_id}
+                    sinifId={secilenDers.dersler?.siniflar?.id}
+                    supabase={supabase}
+                    kullanici={kullanici}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
 
-          {aktifSekme === 'yoklama' && secilenDers && (
-              <OgretmenYoklama
-                dersId={secilenDers.ders_id}
-                sinifId={secilenDers.dersler?.siniflar?.id}
-                supabase={supabase}
-                kullanici={kullanici}
-              />
-            )}
-            {aktifSekme === 'notlar' && secilenDers && (
-              <OgretmenNotlar
-                dersId={secilenDers.ders_id}
-                sinifId={secilenDers.dersler?.siniflar?.id}
-                dersAd={secilenDers.dersler?.ad}
-                supabase={supabase}
-              />
-            )}
+          {/* Yukarıya Doğru Akışkan Sıvı Cam Dock — referans glass, değişmedi */}
+          <div className="fixed bottom-5 inset-x-0 mx-auto z-50 w-[92vw] max-w-[380px] pointer-events-auto">
+            <nav
+              className="relative p-1.5 select-none overflow-hidden rounded-full"
+              style={{
+                backgroundColor: "rgba(255, 255, 255, 0.02)",
+                backdropFilter: "blur(10px) saturate(210%) contrast(105%)",
+                WebkitBackdropFilter: "blur(24px) saturate(210%) contrast(105%)",
+                border: "1px solid rgba(255, 255, 255, 0.28)",
+                boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.50), inset 0 -1px 1px rgba(0, 0, 0, 0.05)"
+              }}
+            >
+              <div className="relative flex items-center w-full h-[44px]">
+                {OGRETMEN_SEKMELER.map((item) => {
+                  const aktif = aktifSekme === item.id;
+                  const Ikon = item.ikon;
 
-            {aktifSekme === 'odevler' && secilenDers && (
-              <OgretmenOdevler
-                dersId={secilenDers.ders_id}
-                sinifId={secilenDers.dersler?.siniflar?.id}
-                dersAd={secilenDers.dersler?.ad}
-                supabase={supabase}
-                kullanici={kullanici}
-              />
-            )}
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setAktifSekme(item.id)}
+                      className="relative z-10 flex-1 h-full flex flex-col items-center justify-center rounded-full cursor-pointer transition-transform duration-150 active:scale-95"
+                    >
+                      {aktif && (
+                        <motion.div
+                          layoutId="ogretmen-active-mercury"
+                          className="absolute inset-0 rounded-full z-0"
+                          style={{
+                            backgroundColor: "rgba(27, 67, 50, 0.20)",
+                            border: "1px solid rgba(27, 67, 50, 0.35)",
+                            boxShadow: "0 2px 8px rgba(27, 67, 50, 0.10), inset 0 1px 1px rgba(255, 255, 255, 0.45)"
+                          }}
+                          transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                        />
+                      )}
 
-            {aktifSekme === 'duyurular' && secilenDers && (
-              <OgretmenDuyurular
-                dersId={secilenDers.ders_id}
-                sinifId={secilenDers.dersler?.siniflar?.id}
-                supabase={supabase}
-                kullanici={kullanici}
-              />
-            )}
-          
+                      <div className="relative z-10 flex flex-col items-center justify-center gap-0.5">
+                        <Ikon
+                          className="size-4.5 transition-transform duration-200"
+                          style={{
+                            color: aktif ? "var(--tema-accent)" : "rgba(30, 41, 59, 0.70)",
+                            strokeWidth: aktif ? 2.3 : 1.85
+                          }}
+                        />
+                        <span
+                          className="text-[10px] tracking-tight leading-none text-center whitespace-nowrap transition-all duration-200"
+                          style={{
+                            color: aktif ? "var(--tema-accent)" : "rgba(30, 41, 59, 0.70)",
+                            fontWeight: aktif ? 600 : 500
+                          }}
+                        >
+                          {item.ad}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </nav>
+          </div>
         </>
       )}
     </div>
@@ -221,7 +310,7 @@ function OgretmenYoklama({ dersId, sinifId, supabase, kullanici }: any) {
       } else {
         setOgrenciler([])
       }
-        }
+    }
     yukle()
   }, [sinifId])
 
@@ -267,53 +356,55 @@ function OgretmenYoklama({ dersId, sinifId, supabase, kullanici }: any) {
   ]
 
   return (
-    <div className="bg-white rounded-xl shadow-sm max-w-6xl mx-auto mt-6">
-      <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-        <h2 className="font-semibold text-gray-800">Yoklama</h2>
+    <div className={`${ui.card} max-w-6xl mx-auto mt-6`}>
+      <div className={ui.cardHeader}>
+        <p className={ui.cardTitle}>Yoklama</p>
         <div className="flex items-center gap-3">
           <input type="date" value={tarih} onChange={(e) => setTarih(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-          <button onClick={kaydet} disabled={kaydediyor}
-            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
+            className={ui.select} />
+          <button onClick={kaydet} disabled={kaydediyor} className="glass-btn-primary">
             {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
           </button>
         </div>
       </div>
-      <div className="divide-y divide-gray-100">
-        {ogrenciler.map((o) => (
-          <div key={o.id} className="px-4 py-3 flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-800 flex items-center gap-2">
-              {o.kullanicilar?.avatar_url ? (
-                <img src={o.kullanicilar.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover" />
-              ) : (
-                <span className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-[9px] font-semibold">
-                  {(o.kullanicilar?.ad?.[0] || '') + (o.kullanicilar?.soyad?.[0] || '')}
-                </span>
-              )}
-              #{o.numara} {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
-              {mevcutYoklamalar.find(y => y.ogrenci_id === o.id) && (
-                <span className="ml-2 text-xs text-gray-400">kaydedildi</span>
-              )}
-            </span>
-            <div className="flex gap-1">
-              {durumlar.map((d) => (
-                <button key={d.value}
-                  onClick={() => setYoklamalar(prev => ({ ...prev, [o.id]: d.value }))}
-                  className={`text-xs px-2 py-1 rounded-lg border transition ${
-                    yoklamalar[o.id] === d.value ? d.renk + ' font-medium' : 'border-gray-200 text-gray-400 hover:bg-gray-50'
-                  }`}>
-                  {d.label}
-                </button>
-              ))}
+      {ogrenciler.length === 0 ? (
+        <div className={ui.cardEmpty}>Bu sınıfta öğrenci yok</div>
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {ogrenciler.map((o) => (
+            <div key={o.id} className="px-4 py-3 flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-800 flex items-center gap-2">
+                {o.kullanicilar?.avatar_url ? (
+                  <img src={o.kullanicilar.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+                ) : (
+                  <span className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-[9px] font-semibold">
+                    {(o.kullanicilar?.ad?.[0] || '') + (o.kullanicilar?.soyad?.[0] || '')}
+                  </span>
+                )}
+                #{o.numara} {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
+                {mevcutYoklamalar.find(y => y.ogrenci_id === o.id) && (
+                  <span className="ml-2 text-xs text-gray-400">kaydedildi</span>
+                )}
+              </span>
+              <div className="flex gap-1">
+                {durumlar.map((d) => (
+                  <button key={d.value}
+                    onClick={() => setYoklamalar(prev => ({ ...prev, [o.id]: d.value }))}
+                    className={`text-xs px-2 py-1 rounded-lg border transition ${
+                      yoklamalar[o.id] === d.value ? d.renk + ' font-medium' : 'border-gray-200 text-gray-400 hover:bg-gray-50'
+                    }`}>
+                    {d.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
-// ===== NOTLAR =====
 // ===== NOTLAR =====
 function OgretmenNotlar({ dersId, sinifId, dersAd, supabase }: any) {
   const [ogrenciler, setOgrenciler] = useState<any[]>([])
@@ -429,169 +520,201 @@ function OgretmenNotlar({ dersId, sinifId, dersAd, supabase }: any) {
     toast('Notlar kaydedildi!')
   }
 
+  const sekmeler = [
+    { id: 'sinavlar', ad: 'Sınavlar' },
+    { id: 'not_giris', ad: 'Not Girişi' },
+    { id: 'gecmis', ad: 'Geçmiş Notlar' },
+  ] as const
+
   return (
-    <div className="space-y-0">
-      <div className="flex gap-3 px-12 py-4">
-        {[
-          { id: 'sinavlar', ad: 'Sınavlar' },
-          { id: 'not_giris', ad: 'Not Girişi' },
-          { id: 'gecmis', ad: 'Geçmiş Notlar' },
-        ].map(s => (
-          <button key={s.id} onClick={() => setSekme(s.id as any)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${sekme === s.id ? 'bg-primary text-primary-foreground' : 'bg-white text-gray-600 border border-gray-300'}`}>
+    <div className="space-y-4">
+      <div className="flex gap-2 px-4 sm:px-12 pt-4">
+        {sekmeler.map(s => (
+          <button key={s.id} onClick={() => setSekme(s.id)}
+            className={sekme === s.id ? 'glass-btn-primary' : 'glass-btn-secondary'}>
             {s.ad}
           </button>
         ))}
       </div>
 
-      {sekme === 'sinavlar' && (
-        <div className="bg-white rounded-xl shadow-sm max-w-6xl mx-auto">
-          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-800">Sınavlar</h2>
-            <button onClick={() => setSinavModalAcik(true)}
-              className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80">
-              + Sınav Ekle
-            </button>
-          </div>
-          {sinavlar.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">Henüz sınav eklenmemiş</div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {sinavlar.map((s) => (
-                <div key={s.id} className="p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-gray-800">{s.baslik}</p>
-                    <span className="text-xs text-gray-400">{new Date(s.tarih).toLocaleDateString('tr-TR')}</span>
-                  </div>
-                  {s.saat && <p className="text-sm text-gray-500 mt-1">Saat: {s.saat}</p>}
-                  {s.konum && <p className="text-sm text-gray-500">Konum: {s.konum}</p>}
-                  {s.aciklama && <p className="text-sm text-gray-400 mt-1">{s.aciklama}</p>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {sekme === 'not_giris' && (
-        <div className="bg-white rounded-xl shadow-sm max-w-6xl mx-auto">
-          <div className="p-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-800 mb-3">Not Girişi</h2>
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <label className="block text-xs text-gray-500 mb-1">Sınav Seç</label>
-                <select value={secilenSinav?.id || ''} onChange={(e) => setSecilenSinav(sinavlar.find(s => s.id === e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
-                  <option value="">Sınav seç...</option>
-                  {sinavlar.map(s => <option key={s.id} value={s.id}>{s.baslik} — {new Date(s.tarih).toLocaleDateString('tr-TR')}</option>)}
-                </select>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={sekme}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.16 }}
+          className="max-w-6xl mx-auto"
+        >
+          {sekme === 'sinavlar' && (
+            <div className={ui.card}>
+              <div className={ui.cardHeader}>
+                <p className={ui.cardTitle}>Sınavlar</p>
+                <button onClick={() => setSinavModalAcik(true)} className="glass-btn-primary">
+                  + Sınav Ekle
+                </button>
               </div>
-              <button onClick={notKaydet} disabled={kaydediyor || !secilenSinav}
-                className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50 mt-4">
-                {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
-              </button>
-            </div>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {ogrenciler.map((o) => (
-              <div key={o.id} className="px-4 py-3 flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-800">
-                  #{o.numara} {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
-                </span>
-                <input type="number" min="0" max="100"
-                  value={notlar[o.id] || ''}
-                  onChange={(e) => setNotlar(prev => ({ ...prev, [o.id]: e.target.value }))}
-                  className="w-20 border border-gray-300 rounded-lg px-3 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="—" />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {sekme === 'gecmis' && (
-        <div className="bg-white rounded-xl shadow-sm max-w-6xl mx-auto">
-          {gecmisNotlar.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center text-gray-400">Henüz not girilmemiş</div>
-          ) : (
-            (() => {
-              const gruplu = gecmisNotlar.reduce((acc: any, n: any) => {
-                const key = n.sinav_id || n.baslik
-                if (!acc[key]) acc[key] = { baslik: n.baslik, tarih: n.tarih, notlar: [] }
-                acc[key].notlar.push(n)
-                return acc
-              }, {})
-              return Object.values(gruplu).map((grup: any) => (
-                <div key={grup.baslik + grup.tarih} className="bg-white rounded-xl shadow-sm">
-                  <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="font-medium text-gray-800">{grup.baslik}</h3>
-                    <span className="text-xs text-gray-400">{grup.tarih}</span>
-                  </div>
-                  <div className="divide-y divide-gray-100">
-                    {grup.notlar.map((n: any) => (
-                      <div key={n.id} className="px-4 py-3 flex items-center justify-between">
-                        <span className="text-sm text-gray-700">#{n.ogrenciler?.numara}</span>
-                        <span className="text-sm font-medium text-gray-800">{n.puan}</span>
+              {sinavlar.length === 0 ? (
+                <div className={ui.cardEmpty}>Henüz sınav eklenmemiş</div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {sinavlar.map((s) => (
+                    <div key={s.id} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium text-gray-800">{s.baslik}</p>
+                        <span className="text-xs text-gray-400">{new Date(s.tarih).toLocaleDateString('tr-TR')}</span>
                       </div>
-                    ))}
+                      {s.saat && <p className="text-sm text-gray-500 mt-1">Saat: {s.saat}</p>}
+                      {s.konum && <p className="text-sm text-gray-500">Konum: {s.konum}</p>}
+                      {s.aciklama && <p className="text-sm text-gray-400 mt-1">{s.aciklama}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {sekme === 'not_giris' && (
+            <div className={ui.card}>
+              <div className="p-4 border-b border-gray-100">
+                <p className={`${ui.cardTitle} mb-3`}>Not Girişi</p>
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className={ui.label}>Sınav Seç</label>
+                    <select value={secilenSinav?.id || ''} onChange={(e) => setSecilenSinav(sinavlar.find(s => s.id === e.target.value))}
+                      className={`${ui.select} w-full`}>
+                      <option value="">Sınav seç...</option>
+                      {sinavlar.map(s => <option key={s.id} value={s.id}>{s.baslik} — {new Date(s.tarih).toLocaleDateString('tr-TR')}</option>)}
+                    </select>
+                  </div>
+                  <button onClick={notKaydet} disabled={kaydediyor || !secilenSinav} className="glass-btn-primary">
+                    {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
+                  </button>
+                </div>
+              </div>
+              {ogrenciler.length === 0 ? (
+                <div className={ui.cardEmpty}>Bu sınıfta öğrenci yok</div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {ogrenciler.map((o) => (
+                    <div key={o.id} className="px-4 py-3 flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-800">
+                        #{o.numara} {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
+                      </span>
+                      <input type="number" min="0" max="100"
+                        value={notlar[o.id] || ''}
+                        onChange={(e) => setNotlar(prev => ({ ...prev, [o.id]: e.target.value }))}
+                        className={`${ui.select} w-20 text-center`}
+                        placeholder="—" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {sekme === 'gecmis' && (
+            gecmisNotlar.length === 0 ? (
+              <div className={ui.card}>
+                <div className={ui.cardEmpty}>Henüz not girilmemiş</div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {(() => {
+                  const gruplu = gecmisNotlar.reduce((acc: any, n: any) => {
+                    const key = n.sinav_id || n.baslik
+                    if (!acc[key]) acc[key] = { baslik: n.baslik, tarih: n.tarih, notlar: [] }
+                    acc[key].notlar.push(n)
+                    return acc
+                  }, {})
+                  return Object.values(gruplu).map((grup: any) => (
+                    <div key={grup.baslik + grup.tarih} className={ui.card}>
+                      <div className={ui.cardHeader}>
+                        <p className={ui.cardTitle}>{grup.baslik}</p>
+                        <span className="text-xs text-gray-400">{grup.tarih}</span>
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {grup.notlar.map((n: any) => (
+                          <div key={n.id} className="px-4 py-3 flex items-center justify-between">
+                            <span className="text-sm text-gray-700">#{n.ogrenciler?.numara}</span>
+                            <span className="text-sm font-medium text-gray-800">{n.puan}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                })()}
+              </div>
+            )
+          )}
+        </motion.div>
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {sinavModalAcik && (
+          <motion.div
+            key="overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className={ui.modalOverlay}
+          >
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Sınav Ekle</p>
+              </div>
+              <div className={`${ui.modalBody} space-y-3`}>
+                <div>
+                  <label className={ui.label}>Başlık</label>
+                  <input value={sinavForm.baslik} onChange={(e) => setSinavForm({...sinavForm, baslik: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="örn: 1. Dönem Sınavı" />
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className={ui.label}>Tarih</label>
+                    <input type="date" value={sinavForm.tarih} onChange={(e) => setSinavForm({...sinavForm, tarih: e.target.value})}
+                      className={`${ui.select} w-full`} />
+                  </div>
+                  <div className="flex-1">
+                    <label className={ui.label}>Saat</label>
+                    <input type="time" value={sinavForm.saat} onChange={(e) => setSinavForm({...sinavForm, saat: e.target.value})}
+                      className={`${ui.select} w-full`} />
                   </div>
                 </div>
-              ))
-            })()
-          )}
-        </div>
-      )}
-
-      {sinavModalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-4">Sınav Ekle</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Başlık</label>
-                <input value={sinavForm.baslik} onChange={(e) => setSinavForm({...sinavForm, baslik: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="örn: 1. Dönem Sınavı" />
-              </div>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600 mb-1">Tarih</label>
-                  <input type="date" value={sinavForm.tarih} onChange={(e) => setSinavForm({...sinavForm, tarih: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+                <div>
+                  <label className={ui.label}>Konum</label>
+                  <input value={sinavForm.konum} onChange={(e) => setSinavForm({...sinavForm, konum: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="örn: Dershane, Online..." />
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600 mb-1">Saat</label>
-                  <input type="time" value={sinavForm.saat} onChange={(e) => setSinavForm({...sinavForm, saat: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+                <div>
+                  <label className={ui.label}>Açıklama (isteğe bağlı)</label>
+                  <textarea value={sinavForm.aciklama} onChange={(e) => setSinavForm({...sinavForm, aciklama: e.target.value})}
+                    rows={3}
+                    className={`${ui.select} w-full resize-none`}
+                    placeholder="Sınav hakkında ek bilgi..." />
                 </div>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Konum</label>
-                <input value={sinavForm.konum} onChange={(e) => setSinavForm({...sinavForm, konum: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="örn: Dershane, Online..." />
+              <div className={ui.modalFooter}>
+                <button onClick={() => setSinavModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>
+                  İptal
+                </button>
+                <button onClick={sinavEkle} disabled={kaydediyor} className="glass-btn-primary flex-1">
+                  {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
+                </button>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Açıklama (isteğe bağlı)</label>
-                <textarea value={sinavForm.aciklama} onChange={(e) => setSinavForm({...sinavForm, aciklama: e.target.value})}
-                  rows={3}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none"
-                  placeholder="Sınav hakkında ek bilgi..." />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setSinavModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
-                İptal
-              </button>
-              <button onClick={sinavEkle} disabled={kaydediyor}
-                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
-                {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -646,17 +769,16 @@ function OgretmenDuyurular({ dersId, sinifId, supabase, kullanici }: any) {
   }
 
   return (
-    <div>
-      <div className="bg-white rounded-xl shadow-sm max-w-6xl mx-auto mt-6">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800">Duyurular</h2>
-          <button onClick={() => setModalAcik(true)}
-            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80">
+    <div className="max-w-6xl mx-auto mt-6">
+      <div className={ui.card}>
+        <div className={ui.cardHeader}>
+          <p className={ui.cardTitle}>Duyurular</p>
+          <button onClick={() => setModalAcik(true)} className="glass-btn-primary">
             + Duyuru Ekle
           </button>
         </div>
         {duyurular.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">Henüz duyuru yok</div>
+          <div className={ui.cardEmpty}>Henüz duyuru yok</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {duyurular.map((d) => (
@@ -672,41 +794,51 @@ function OgretmenDuyurular({ dersId, sinifId, supabase, kullanici }: any) {
         )}
       </div>
 
-      {modalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-4">Yeni Duyuru</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Başlık</label>
-                <input value={form.baslik} onChange={(e) => setForm({...form, baslik: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="Duyuru başlığı..." />
+      <AnimatePresence>
+        {modalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={ui.modalOverlay}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Yeni Duyuru</p>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">İçerik</label>
-                <textarea value={form.icerik} onChange={(e) => setForm({...form, icerik: e.target.value})}
-                  rows={5}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none"
-                  placeholder="Duyuru içeriği..." />
+              <div className={`${ui.modalBody} space-y-3`}>
+                <div>
+                  <label className={ui.label}>Başlık</label>
+                  <input value={form.baslik} onChange={(e) => setForm({...form, baslik: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="Duyuru başlığı..." />
+                </div>
+                <div>
+                  <label className={ui.label}>İçerik</label>
+                  <textarea value={form.icerik} onChange={(e) => setForm({...form, icerik: e.target.value})}
+                    rows={5}
+                    className={`${ui.select} w-full resize-none`}
+                    placeholder="Duyuru içeriği..." />
+                </div>
               </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
-                İptal
-              </button>
-              <button onClick={duyuruEkle} disabled={kaydediyor}
-                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
-                {kaydediyor ? 'Yayınlanıyor...' : 'Yayınla'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              <div className={ui.modalFooter}>
+                <button onClick={() => setModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>
+                  İptal
+                </button>
+                <button onClick={duyuruEkle} disabled={kaydediyor} className="glass-btn-primary flex-1">
+                  {kaydediyor ? 'Yayınlanıyor...' : 'Yayınla'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
+
 // ===== ÖDEVLER (Hoca) =====
 function OgretmenOdevler({ dersId, sinifId, dersAd, supabase, kullanici }: any) {
   const [odevler, setOdevler] = useState<any[]>([])
@@ -875,16 +1007,15 @@ function OgretmenOdevler({ dersId, sinifId, dersAd, supabase, kullanici }: any) 
 
   return (
     <div className="max-w-6xl mx-auto mt-6 space-y-4">
-      <div className="bg-white rounded-xl shadow-sm">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800">Ödevler — {dersAd}</h2>
-          <button onClick={() => setOdevModalAcik(true)}
-            className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-sm hover:bg-primary/80">
+      <div className={ui.card}>
+        <div className={ui.cardHeader}>
+          <p className={ui.cardTitle}>Ödevler — {dersAd}</p>
+          <button onClick={() => setOdevModalAcik(true)} className="glass-btn-primary">
             + Ödev Ekle
           </button>
         </div>
         {odevler.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">Henüz ödev eklenmemiş</div>
+          <div className={ui.cardEmpty}>Henüz ödev eklenmemiş</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {odevler.map((o) => (
@@ -903,10 +1034,10 @@ function OgretmenOdevler({ dersId, sinifId, dersAd, supabase, kullanici }: any) 
                   {o.aciklama && <p className="text-sm text-gray-400 mt-1">{o.aciklama}</p>}
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <button onClick={() => teslimleriAc(o)} className="text-primary text-sm hover:underline">
+                  <button onClick={() => teslimleriAc(o)} className={ui.btnGhost}>
                     Teslimler
                   </button>
-                  <button onClick={() => odevSil(o.id)} className="text-red-500 text-sm hover:text-red-700">
+                  <button onClick={() => odevSil(o.id)} className={ui.btnDanger}>
                     Sil
                   </button>
                 </div>
@@ -916,128 +1047,149 @@ function OgretmenOdevler({ dersId, sinifId, dersAd, supabase, kullanici }: any) 
         )}
       </div>
 
-      {odevModalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl animate-modal">
-            <h3 className="font-semibold text-gray-800 mb-4">Ödev Ekle — {dersAd}</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Başlık</label>
-                <input value={odevForm.baslik} onChange={(e) => setOdevForm({...odevForm, baslik: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                  placeholder="örn: Siyer Kitabı Müzakeresi" />
+      <AnimatePresence>
+        {odevModalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={ui.modalOverlay}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={ui.modalCard}
+            >
+              <div className={ui.modalHeader}>
+                <p className={ui.modalTitle}>Ödev Ekle</p>
+                <p className="text-xs text-gray-400 mt-0.5">{dersAd}</p>
               </div>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600 mb-1">Tür</label>
-                  <select value={odevForm.tur} onChange={(e) => setOdevForm({...odevForm, tur: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">
-                    <option value="kitap_muzakeresi">Kitap Müzakeresi</option>
-                    <option value="makale">Makale</option>
-                    <option value="diger">Diğer</option>
-                  </select>
+              <div className={`${ui.modalBody} space-y-3`}>
+                <div>
+                  <label className={ui.label}>Başlık</label>
+                  <input value={odevForm.baslik} onChange={(e) => setOdevForm({...odevForm, baslik: e.target.value})}
+                    className={`${ui.select} w-full`}
+                    placeholder="örn: Siyer Kitabı Müzakeresi" />
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm text-gray-600 mb-1">Dönem</label>
-                  <input value={odevForm.donem} onChange={(e) => setOdevForm({...odevForm, donem: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                    placeholder="örn: 2025-2026 Güz" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Son Teslim Tarihi (isteğe bağlı)</label>
-                <input type="date" value={odevForm.son_teslim_tarihi} onChange={(e) => setOdevForm({...odevForm, son_teslim_tarihi: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Açıklama (isteğe bağlı)</label>
-                <textarea value={odevForm.aciklama} onChange={(e) => setOdevForm({...odevForm, aciklama: e.target.value})}
-                  rows={3}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none"
-                  placeholder="Ödev hakkında ek bilgi..." />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setOdevModalAcik(false)}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">
-                İptal
-              </button>
-              <button onClick={odevEkle} disabled={kaydediyor}
-                className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm hover:bg-primary/80 disabled:opacity-50">
-                {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {teslimModalAcik && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-overlay">
-          <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto animate-modal">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">{aktifOdev?.baslik} — Teslimler</h3>
-              <button onClick={() => setTeslimModalAcik(false)} className="text-gray-400 hover:text-gray-600">✕</button>
-            </div>
-
-            {teslimYukleniyor ? (
-              <p className="text-gray-500">Yükleniyor...</p>
-            ) : teslimler.length === 0 ? (
-              <p className="text-gray-500">Henüz teslim yok.</p>
-            ) : (
-              <div className="space-y-4">
-                {teslimler.map((t) => (
-                  <div key={t.ogrenci_id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-medium">{t.ogrenciAdi}</p>
-                        <p className="text-sm text-gray-500">No: {t.ogrenciNo}</p>
-                      </div>
-                      <p className="text-sm text-gray-500">
-                        {new Date(t.teslim_tarihi).toLocaleDateString('tr-TR')}
-                      </p>
-                    </div>
-
-                    <details className="mb-3">
-                      <summary className="cursor-pointer text-sm text-[#344e41]">Metni görüntüle</summary>
-                      <div
-                        className="prose prose-sm max-w-none mt-2 border-t pt-2"
-                        dangerouslySetInnerHTML={{ __html: t.icerik_html || '' }}
-                      />
-                    </details>
-
-                    
-                      <a
-                      href={`/api/odev-export-docx?id=${t.id}`}
-                      className="text-sm text-[#344e41] hover:underline mb-3 inline-block"
-                    >
-                      Dosyayı indir (.docx)
-                    </a>
-
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        className="border rounded px-2 py-1 w-24"
-                        placeholder="Puan"
-                        value={puanlar[t.ogrenci_id] || ''}
-                        onChange={(e) =>
-                          setPuanlar((prev) => ({ ...prev, [t.ogrenci_id]: e.target.value }))
-                        }
-                      />
-                      <button
-                        onClick={() => notuKaydet(t.ogrenci_id)}
-                        className="bg-[#344e41] text-white rounded px-3 py-1 text-sm hover:bg-[#344e41]"
-                      >
-                        Kaydet
-                      </button>
-                    </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className={ui.label}>Tür</label>
+                    <select value={odevForm.tur} onChange={(e) => setOdevForm({...odevForm, tur: e.target.value})}
+                      className={`${ui.select} w-full`}>
+                      <option value="kitap_muzakeresi">Kitap Müzakeresi</option>
+                      <option value="makale">Makale</option>
+                      <option value="diger">Diğer</option>
+                    </select>
                   </div>
-                ))}
+                  <div className="flex-1">
+                    <label className={ui.label}>Dönem</label>
+                    <input value={odevForm.donem} onChange={(e) => setOdevForm({...odevForm, donem: e.target.value})}
+                      className={`${ui.select} w-full`}
+                      placeholder="örn: 2025-2026 Güz" />
+                  </div>
+                </div>
+                <div>
+                  <label className={ui.label}>Son Teslim Tarihi (isteğe bağlı)</label>
+                  <input type="date" value={odevForm.son_teslim_tarihi} onChange={(e) => setOdevForm({...odevForm, son_teslim_tarihi: e.target.value})}
+                    className={`${ui.select} w-full`} />
+                </div>
+                <div>
+                  <label className={ui.label}>Açıklama (isteğe bağlı)</label>
+                  <textarea value={odevForm.aciklama} onChange={(e) => setOdevForm({...odevForm, aciklama: e.target.value})}
+                    rows={3}
+                    className={`${ui.select} w-full resize-none`}
+                    placeholder="Ödev hakkında ek bilgi..." />
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      )}
-      <FloatingDock items={OGRETMEN_SEKMELER} aktifId={aktifSekme} onChange={(id) => setAktifSekme(id)} />
-</div>
+              <div className={ui.modalFooter}>
+                <button onClick={() => setOdevModalAcik(false)} className={`${ui.btnSecondary} flex-1`}>
+                  İptal
+                </button>
+                <button onClick={odevEkle} disabled={kaydediyor} className="glass-btn-primary flex-1">
+                  {kaydediyor ? 'Ekleniyor...' : 'Ekle ve Duyur'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {teslimModalAcik && (
+          <motion.div key="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={ui.modalOverlay}>
+            <motion.div
+              key="card"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              className={`${ui.modalCard} max-w-2xl max-h-[85vh] overflow-y-auto`}
+            >
+              <div className={ui.modalHeader}>
+                <div className="flex items-center justify-between">
+                  <p className={ui.modalTitle}>{aktifOdev?.baslik} — Teslimler</p>
+                  <button onClick={() => setTeslimModalAcik(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+              </div>
+
+              <div className={ui.modalBody}>
+                {teslimYukleniyor ? (
+                  <p className="text-gray-500">Yükleniyor...</p>
+                ) : teslimler.length === 0 ? (
+                  <p className="text-gray-500">Henüz teslim yok.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {teslimler.map((t) => (
+                      <div key={t.ogrenci_id} className="border border-gray-200 rounded-xl p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <p className="font-medium">{t.ogrenciAdi}</p>
+                            <p className="text-sm text-gray-500">No: {t.ogrenciNo}</p>
+                          </div>
+                          <p className="text-sm text-gray-500">
+                            {new Date(t.teslim_tarihi).toLocaleDateString('tr-TR')}
+                          </p>
+                        </div>
+
+                        <details className="mb-3">
+                          <summary className="cursor-pointer text-sm text-[#344e41]">Metni görüntüle</summary>
+                          <div
+                            className="prose prose-sm max-w-none mt-2 border-t pt-2"
+                            dangerouslySetInnerHTML={{ __html: t.icerik_html || '' }}
+                          />
+                        </details>
+
+                        <a
+                          href={`/api/odev-export-docx?id=${t.id}`}
+                          className={`${ui.btnGhost} mb-3 inline-block`}
+                        >
+                          Dosyayı indir (.docx)
+                        </a>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            className={`${ui.select} w-24`}
+                            placeholder="Puan"
+                            value={puanlar[t.ogrenci_id] || ''}
+                            onChange={(e) =>
+                              setPuanlar((prev) => ({ ...prev, [t.ogrenci_id]: e.target.value }))
+                            }
+                          />
+                          <button
+                            onClick={() => notuKaydet(t.ogrenci_id)}
+                            className="glass-btn-primary"
+                          >
+                            Kaydet
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }

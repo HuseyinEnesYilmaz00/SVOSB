@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SVOBS">
+  <rect width="512" height="512" rx="104" fill="#344e41"/>
+  <circle cx="256" cy="232" r="142" fill="#ffffff"/>
+  <text x="256" y="270" fill="#344e41" font-family="Arial, sans-serif" font-size="148" font-weight="700" text-anchor="middle">SV</text>
+  <text x="256" y="420" fill="#ffffff" font-family="Arial, sans-serif" font-size="54" font-weight="700" letter-spacing="8" text-anchor="middle">OBS</text>
+</svg>

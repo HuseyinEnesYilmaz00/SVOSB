@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { isValidUuid, requireAdmin } from '@/lib/supabase/admin-auth'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,16 +9,39 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: Request) {
   try {
+    const { response } = await requireAdmin()
+    if (response) return response
+
     const { ogrenciId, kullaniciId } = await req.json()
 
-    if (!ogrenciId || !kullaniciId) {
-      return NextResponse.json({ error: 'ogrenciId ve kullaniciId zorunlu' }, { status: 400 })
+    if (!isValidUuid(ogrenciId) || !isValidUuid(kullaniciId)) {
+      return NextResponse.json({ error: 'Geçerli ogrenciId ve kullaniciId gerekli.' }, { status: 400 })
+    }
+
+    const { data: ogrenci, error: ogrenciKontrolHatasi } = await supabaseAdmin
+      .from('ogrenciler')
+      .select('id, kullanici_id')
+      .eq('id', ogrenciId)
+      .eq('kullanici_id', kullaniciId)
+      .maybeSingle()
+
+    if (ogrenciKontrolHatasi) {
+      return NextResponse.json({ error: 'Öğrenci doğrulanamadı: ' + ogrenciKontrolHatasi.message }, { status: 400 })
+    }
+    if (!ogrenci) {
+      return NextResponse.json({ error: 'Öğrenci ve kullanıcı eşleşmiyor.' }, { status: 400 })
     }
 
     // 1) Bağlı kayıtları sil (foreign key sırasına dikkat)
-    await supabaseAdmin.from('yoklamalar').delete().eq('ogrenci_id', ogrenciId)
-    await supabaseAdmin.from('notlar').delete().eq('ogrenci_id', ogrenciId)
-    await supabaseAdmin.from('ders_sorumlulari').delete().eq('ogrenci_id', ogrenciId)
+    const childDeletes = await Promise.all([
+      supabaseAdmin.from('yoklamalar').delete().eq('ogrenci_id', ogrenciId),
+      supabaseAdmin.from('notlar').delete().eq('ogrenci_id', ogrenciId),
+      supabaseAdmin.from('ders_sorumlulari').delete().eq('ogrenci_id', ogrenciId),
+    ])
+    const childDeleteError = childDeletes.find(({ error }) => error)?.error
+    if (childDeleteError) {
+      return NextResponse.json({ error: 'Öğrenciye bağlı kayıtlar silinemedi: ' + childDeleteError.message }, { status: 400 })
+    }
 
     // 2) Öğrenci satırını sil
     const { error: ogrenciHata } = await supabaseAdmin.from('ogrenciler').delete().eq('id', ogrenciId)
@@ -38,7 +62,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true })
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Beklenmeyen hata' }, { status: 500 })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Beklenmeyen hata'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

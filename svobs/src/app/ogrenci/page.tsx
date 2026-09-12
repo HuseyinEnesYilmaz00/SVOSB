@@ -4,27 +4,29 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { programTema } from '@/lib/tema'
 import { StudentReportView } from '@/components/student/student-report-view'
 import { SorumlulukPaneli } from '@/app/ogrenci/sorumluluk'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  BookOpen, 
-  CalendarCheck, 
-  FileText, 
-  Bell, 
-  Inbox, 
-  Camera, 
-  Award, 
-  Flame, 
-  Star, 
-  Sparkles, 
-  Users, 
+import {
+  BookOpen,
+  CalendarCheck,
+  FileText,
+  Bell,
+  Inbox,
+  Camera,
+  Award,
+  Flame,
+  Star,
+  Sparkles,
+  Users,
   TrendingUp,
   User,
   LogOut,
-  CheckCheck
+  CheckCheck,
+  MessageSquare,
+  Send,
+  CheckCircle2,
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { guncelAkademikDonem, tarihtenDonem } from '@/lib/donem'
@@ -34,7 +36,28 @@ const SEKMELER = [
   { id: 'dersler', ad: 'Dersler', ikon: BookOpen },
   { id: 'duyurular', ad: 'Duyurular', ikon: Bell },
   { id: 'hesabim', ad: 'Hesabım', ikon: User },
+  { id: 'bildir', ad: 'Bildir', ikon: MessageSquare },
 ]
+
+// Dock ile aynı sıvı-cam dili — okunabilirlik için kart/modal arka planları
+// dock'un kendisinden (beyaz %2) çok daha opak (%80-90) tutuldu.
+const glass = {
+  card: "bg-white/80 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] overflow-hidden",
+  cardHead: "flex items-center justify-between px-5 py-3.5 border-b border-white/50",
+  btnPrimary: "rounded-xl text-sm font-medium bg-primary text-primary-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.25),0_4px_14px_-4px_rgba(0,0,0,0.25)] transition-all duration-200 hover:brightness-110 active:scale-95 disabled:opacity-50 disabled:active:scale-100 disabled:hover:brightness-100",
+  btnSecondary: "rounded-xl text-sm font-medium text-slate-600 bg-white/50 hover:bg-white/80 border border-white/60 backdrop-blur-sm shadow-sm transition-all duration-200 active:scale-95",
+  input: "w-full border border-slate-200/80 bg-white/70 backdrop-blur-sm rounded-xl px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition",
+  overlay: "fixed inset-0 bg-black/30 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-overlay",
+  modal: "bg-white/90 backdrop-blur-xl rounded-2xl border border-white/60 shadow-2xl w-full max-w-sm p-6 animate-modal",
+}
+
+// Sekme değişimlerinde kullanılan tek tip geçiş — dock'un açılma eğrisiyle aynı ease, kısa ve göze batmayan.
+const gecisProps = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
+  transition: { duration: 0.18, ease: [0.32, 0.72, 0, 1] as const },
+}
 
 export default function OgrenciPage() {
   const [kullanici, setKullanici] = useState<any>(null)
@@ -87,7 +110,7 @@ export default function OgrenciPage() {
         .eq('program_id', o.siniflar?.programlar?.id)
         .or(`hedef_tipi.eq.tumu,hedef_sinif_id.eq.${sinifIdGuvenli},hedef_kullanici_id.eq.${user.id}`)
         .order('olusturulma_tarihi', { ascending: false })
-      
+
       const gelenDuyurular = duy || []
       setDuyurular(gelenDuyurular)
 
@@ -259,8 +282,14 @@ export default function OgrenciPage() {
     )
   }
 
+  // Esma öğrencileri için mürdüm eriği, diğerleri için yeşil — dock/inline stiller CSS
+  // değişkeni üzerinden gitmediği için burada hesaplanıp aşağıda elle veriliyor.
+  const tema = programTema(program?.ad || '')
+  const accentHex = tema === 'esma' ? '#a53860' : '#1b4332'
+  const accentRgb = tema === 'esma' ? '165, 56, 96' : '27, 67, 50'
+
   return (
-    <div className="min-h-svh bg-background relative">
+    <div className={`tema-${tema} min-h-svh bg-background relative`}>
       {/* Ultra Kompakt Şeffaf Üst Bar (Ekranın yerini çalmaz) */}
       <header className="px-4 py-2 flex items-center justify-between sticky top-0 z-20 bg-background/60 backdrop-blur-xl border-b border-border/40">
         <div className="flex items-center gap-2.5">
@@ -283,15 +312,13 @@ export default function OgrenciPage() {
             <span className="text-xs font-medium hidden sm:inline-block text-foreground">{kullanici?.ad}</span>
           </div>
 
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10" 
+          <button
             onClick={cikisYap}
             title="Çıkış Yap"
+            className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-all duration-200 active:scale-95"
           >
             <LogOut className="size-4" />
-          </Button>
+          </button>
         </div>
       </header>
 
@@ -300,192 +327,198 @@ export default function OgrenciPage() {
         <OgrenciKatilimYildonumu ogrenci={ogrenci} />
         <OgrenciBuHaftaOzet ogrenciId={ogrenci?.id} dersler={dersler} supabase={supabase} />
 
-        {aktifSekme === 'program' && (
-          <OgrenciDersProgrami sinifId={sinif?.id} supabase={supabase} />
-        )}
-
-        {aktifSekme === 'dersler' && (
-          <div className="space-y-5">
-            <OgrenciOdevlerim ogrenciId={ogrenci?.id} dersler={dersler} supabase={supabase} />
-
-            {dersSorumluluklari.length > 0 && (
-              <SorumlulukPaneli
-                ogrenciId={ogrenci?.id}
-                dersler={dersSorumluluklari}
-                supabase={supabase}
-              />
+        <AnimatePresence mode="wait">
+          <motion.div key={aktifSekme} {...gecisProps}>
+            {aktifSekme === 'program' && (
+              <OgrenciDersProgrami sinifId={sinif?.id} supabase={supabase} />
             )}
 
-            <StudentReportView
-              dersler={dersler}
-              genelOrtalama={genelOrtalama}
-              ogrenciNo={ogrenci?.numara}
-            />
+            {aktifSekme === 'dersler' && (
+              <div className="space-y-5">
+                <OgrenciOdevlerim ogrenciId={ogrenci?.id} dersler={dersler} supabase={supabase} />
 
-            <OgrenciGelisimGrafigi ogrenciId={ogrenci?.id} supabase={supabase} />
-            <OgrenciDevamTrendMesaji dersler={dersler} />
-            <SinifTopluluk dersler={dersler} supabase={supabase} />
-          </div>
-        )}
-
-        {aktifSekme === 'duyurular' && (
-          <Card className="p-0 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Bell className="size-4 text-muted-foreground" />
-                <h2 className="font-medium text-sm text-foreground">Duyurular</h2>
-              </div>
-              {duyurular.length > 0 && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={duyurulariOkunduIsaretle}
-                  className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-primary"
-                >
-                  <CheckCheck className="size-3.5" />
-                  <span>Tümünü Okundu Say</span>
-                </Button>
-              )}
-            </div>
-
-            {duyurular.length === 0 ? (
-              <div className="px-5 py-12 flex flex-col items-center gap-2 text-sm text-muted-foreground">
-                <Inbox className="size-8 opacity-40" />
-                Henüz duyuru yok
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {duyurular.map((d) => (
-                  <div key={d.id} className="px-5 py-4">
-                    <p className="font-medium text-sm text-foreground">{d.baslik}</p>
-                    <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{d.icerik}</p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      {d.kullanicilar?.ad} {d.kullanicilar?.soyad} — {new Date(d.olusturulma_tarihi).toLocaleDateString('tr-TR')}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        )}
-
-        {aktifSekme === 'hesabim' && (
-          <div className="space-y-5">
-            <Card className="p-0 overflow-hidden">
-              <div className="px-5 py-5 flex items-center gap-4">
-                {kullanici?.avatar_url ? (
-                  <img src={kullanici.avatar_url} alt="Profil" className="w-16 h-16 rounded-full object-cover border border-border" />
-                ) : (
-                  <div className="w-16 h-16 rounded-full bg-primary/15 text-primary flex items-center justify-center text-lg font-semibold">
-                    {(kullanici?.ad?.[0] || '') + (kullanici?.soyad?.[0] || '')}
-                  </div>
+                {dersSorumluluklari.length > 0 && (
+                  <SorumlulukPaneli
+                    ogrenciId={ogrenci?.id}
+                    dersler={dersSorumluluklari}
+                    supabase={supabase}
+                  />
                 )}
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">{kullanici?.ad} {kullanici?.soyad}</p>
-                  <label className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer mt-1">
-                    <Camera className="size-3.5" />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      disabled={avatarYukleniyor}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) avatarYukle(file)
-                      }}
-                    />
-                    {avatarYukleniyor ? 'Yükleniyor...' : 'Fotoğraf değiştir'}
-                  </label>
-                </div>
-              </div>
-            </Card>
 
-            {(() => {
-              const rozetler: { ad: string, ikon: any, renk: string, aciklama: string }[] = []
-              const puanliDersler = dersler.filter((d: any) => d.dersPuani !== null)
-              const tamDevam = dersler.length > 0 && dersler.every((d: any) => d.devamPuani === null || d.devamPuani === 100)
-              if (tamDevam && dersler.some((d: any) => d.devamPuani !== null)) {
-                rozetler.push({
-                  ad: 'Tam Devam',
-                  ikon: Flame,
-                  renk: 'text-orange-500 bg-orange-50 dark:bg-orange-950/40',
-                  aciklama: 'Kayıtlı olduğun tüm derslerde devam oranın %100. Hiç ders kaçırmadın, tebrikler!'
-                })
-              }
-              if (genelOrtalama !== null && genelOrtalama >= 85) {
-                rozetler.push({
-                  ad: 'Yüksek Başarı',
-                  ikon: Star,
-                  renk: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40',
-                  aciklama: `Genel ortalaman ${genelOrtalama} — 85 ve üzeri ortalamalara verilen bir rozet.`
-                })
-              }
-              if (puanliDersler.length > 0 && puanliDersler.every((d: any) => d.dersPuani >= 70)) {
-                rozetler.push({
-                  ad: 'İstikrarlı',
-                  ikon: Award,
-                  renk: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40',
-                  aciklama: 'Kayıtlı olduğun bütün derslerde puanın 70 ve üzerinde. Hiçbir dersin ortalaması düşük değil.'
-                })
-              }
-              if (rozetler.length === 0) return null
-              return (
-                <Card className="p-0 overflow-hidden">
-                  <div className="px-5 py-4 border-b border-border">
-                    <h2 className="font-medium text-sm text-foreground">Rozetlerim</h2>
+                <StudentReportView
+                  dersler={dersler}
+                  genelOrtalama={genelOrtalama}
+                  ogrenciNo={ogrenci?.numara}
+                />
+
+                <OgrenciGelisimGrafigi ogrenciId={ogrenci?.id} supabase={supabase} accentHex={accentHex} />
+                <OgrenciDevamTrendMesaji dersler={dersler} />
+                <SinifTopluluk dersler={dersler} supabase={supabase} />
+              </div>
+            )}
+
+            {aktifSekme === 'duyurular' && (
+              <div className={glass.card}>
+                <div className={glass.cardHead}>
+                  <div className="flex items-center gap-2">
+                    <Bell className="size-4 text-muted-foreground" />
+                    <h2 className="font-medium text-sm text-foreground">Duyurular</h2>
                   </div>
-                  <div className="px-5 py-4 flex flex-wrap gap-2">
-                    {rozetler.map((r) => (
-                      <button
-                        key={r.ad}
-                        onClick={() => setSecilenRozet({ ad: r.ad, aciklama: r.aciklama })}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${r.renk} hover:opacity-80 transition`}
-                      >
-                        <r.ikon className="size-3.5" />
-                        {r.ad}
-                      </button>
+                  {duyurular.length > 0 && (
+                    <button
+                      onClick={duyurulariOkunduIsaretle}
+                      className="h-8 px-3 rounded-lg text-xs font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200 active:scale-95 inline-flex items-center gap-1.5"
+                    >
+                      <CheckCheck className="size-3.5" />
+                      <span>Tümünü Okundu Say</span>
+                    </button>
+                  )}
+                </div>
+
+                {duyurular.length === 0 ? (
+                  <div className="px-5 py-12 flex flex-col items-center gap-2 text-sm text-muted-foreground">
+                    <Inbox className="size-8 opacity-40" />
+                    Henüz duyuru yok
+                  </div>
+                ) : (
+                  <div className="divide-y divide-white/50">
+                    {duyurular.map((d) => (
+                      <div key={d.id} className="px-5 py-4">
+                        <p className="font-medium text-sm text-foreground">{d.baslik}</p>
+                        <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{d.icerik}</p>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {d.kullanicilar?.ad} {d.kullanicilar?.soyad} — {new Date(d.olusturulma_tarihi).toLocaleDateString('tr-TR')}
+                        </p>
+                      </div>
                     ))}
                   </div>
-                </Card>
-              )
-            })()}
-
-            <Card className="p-0 overflow-hidden">
-              <div className="px-5 py-4 border-b border-border">
-                <h2 className="font-medium text-sm text-foreground">Hesabım</h2>
+                )}
               </div>
-              <div className="divide-y divide-border">
-                {[
-                  { label: 'Ad Soyad', value: `${kullanici?.ad} ${kullanici?.soyad}` },
-                  { label: 'E-posta', value: kullanici?.email },
-                  { label: 'Telefon', value: kullanici?.telefon || '—' },
-                  { label: 'Öğrenci No', value: `#${ogrenci?.numara}` },
-                  { label: 'Sınıf', value: sinif?.ad },
-                  { label: 'Program', value: program?.ad },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between px-5 py-3">
-                    <span className="text-sm text-muted-foreground">{item.label}</span>
-                    <span className="text-sm font-medium text-foreground">{item.value}</span>
+            )}
+
+            {aktifSekme === 'hesabim' && (
+              <div className="space-y-5">
+                <div className={glass.card}>
+                  <div className="px-5 py-5 flex items-center gap-4">
+                    {kullanici?.avatar_url ? (
+                      <img src={kullanici.avatar_url} alt="Profil" className="w-16 h-16 rounded-full object-cover border border-border" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full bg-primary/15 text-primary flex items-center justify-center text-lg font-semibold">
+                        {(kullanici?.ad?.[0] || '') + (kullanici?.soyad?.[0] || '')}
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-foreground">{kullanici?.ad} {kullanici?.soyad}</p>
+                      <label className="inline-flex items-center gap-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-all duration-200 active:scale-95 rounded-lg px-2.5 py-1 cursor-pointer mt-1.5">
+                        <Camera className="size-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={avatarYukleniyor}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) avatarYukle(file)
+                          }}
+                        />
+                        {avatarYukleniyor ? 'Yükleniyor...' : 'Fotoğraf değiştir'}
+                      </label>
+                    </div>
                   </div>
-                ))}
-              </div>
-              <div className="px-5 py-3 border-t border-border">
-                <a href="/sifre-degistir" className="text-sm text-primary hover:underline">
-                  Şifre Değiştir
-                </a>
-              </div>
-            </Card>
+                </div>
 
-            <div className="flex justify-center mt-12 pb-6">
-              <span className="text-[10px] text-muted-foreground/20 select-none cursor-default font-mono">
-                enes°
-              </span>
-            </div>
-          </div>
-        )}
+                {(() => {
+                  const rozetler: { ad: string, ikon: any, renk: string, aciklama: string }[] = []
+                  const puanliDersler = dersler.filter((d: any) => d.dersPuani !== null)
+                  const tamDevam = dersler.length > 0 && dersler.every((d: any) => d.devamPuani === null || d.devamPuani === 100)
+                  if (tamDevam && dersler.some((d: any) => d.devamPuani !== null)) {
+                    rozetler.push({
+                      ad: 'Tam Devam',
+                      ikon: Flame,
+                      renk: 'text-orange-500 bg-orange-50 dark:bg-orange-950/40',
+                      aciklama: 'Kayıtlı olduğun tüm derslerde devam oranın %100. Hiç ders kaçırmadın, tebrikler!'
+                    })
+                  }
+                  if (genelOrtalama !== null && genelOrtalama >= 85) {
+                    rozetler.push({
+                      ad: 'Yüksek Başarı',
+                      ikon: Star,
+                      renk: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40',
+                      aciklama: `Genel ortalaman ${genelOrtalama} — 85 ve üzeri ortalamalara verilen bir rozet.`
+                    })
+                  }
+                  if (puanliDersler.length > 0 && puanliDersler.every((d: any) => d.dersPuani >= 70)) {
+                    rozetler.push({
+                      ad: 'İstikrarlı',
+                      ikon: Award,
+                      renk: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40',
+                      aciklama: 'Kayıtlı olduğun bütün derslerde puanın 70 ve üzerinde. Hiçbir dersin ortalaması düşük değil.'
+                    })
+                  }
+                  if (rozetler.length === 0) return null
+                  return (
+                    <div className={glass.card}>
+                      <div className="px-5 py-4 border-b border-white/50">
+                        <h2 className="font-medium text-sm text-foreground">Rozetlerim</h2>
+                      </div>
+                      <div className="px-5 py-4 flex flex-wrap gap-2">
+                        {rozetler.map((r) => (
+                          <button
+                            key={r.ad}
+                            onClick={() => setSecilenRozet({ ad: r.ad, aciklama: r.aciklama })}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm transition-all duration-200 active:scale-95 hover:opacity-80 ${r.renk}`}
+                          >
+                            <r.ikon className="size-3.5" />
+                            {r.ad}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                <div className={glass.card}>
+                  <div className="px-5 py-4 border-b border-white/50">
+                    <h2 className="font-medium text-sm text-foreground">Hesabım</h2>
+                  </div>
+                  <div className="divide-y divide-white/50">
+                    {[
+                      { label: 'Ad Soyad', value: `${kullanici?.ad} ${kullanici?.soyad}` },
+                      { label: 'E-posta', value: kullanici?.email },
+                      { label: 'Telefon', value: kullanici?.telefon || '—' },
+                      { label: 'Öğrenci No', value: `#${ogrenci?.numara}` },
+                      { label: 'Sınıf', value: sinif?.ad },
+                      { label: 'Program', value: program?.ad },
+                    ].map((item) => (
+                      <div key={item.label} className="flex items-center justify-between px-5 py-3">
+                        <span className="text-sm text-muted-foreground">{item.label}</span>
+                        <span className="text-sm font-medium text-foreground">{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="px-5 py-3 border-t border-white/50">
+                    <a href="/sifre-degistir" className="text-sm text-primary hover:underline transition">
+                      Şifre Değiştir
+                    </a>
+                  </div>
+                </div>
+
+                <div className="flex justify-center mt-12 pb-6">
+                  <span className="text-[10px] text-muted-foreground/20 select-none cursor-default font-mono">
+                    enes°
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {aktifSekme === 'bildir' && (
+  <OgrenciGeriBildirim supabase={supabase} />
+)}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
-            {/* Ekranın Altında Yüzen Sıvı Cam Navigasyon Barı */}
+      {/* Ekranın Altında Yüzen Sıvı Cam Navigasyon Barı */}
       <div className="fixed bottom-5 inset-x-0 mx-auto z-50 w-[92vw] max-w-[380px] pointer-events-auto">
         <motion.nav
           className="relative p-1.5 select-none overflow-hidden rounded-full"
@@ -515,9 +548,9 @@ export default function OgrenciPage() {
                       layoutId="ogrenci-active-mercury"
                       className="absolute inset-0 rounded-full z-0"
                       style={{
-                        backgroundColor: "rgba(27, 67, 50, 0.20)",
-                        border: "1px solid rgba(27, 67, 50, 0.35)",
-                        boxShadow: "0 2px 8px rgba(27, 67, 50, 0.10), inset 0 1px 1px rgba(255, 255, 255, 0.45)"
+                        backgroundColor: `rgba(${accentRgb}, 0.20)`,
+                        border: `1px solid rgba(${accentRgb}, 0.35)`,
+                        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.10), inset 0 1px 1px rgba(255, 255, 255, 0.45)"
                       }}
                       transition={{ type: "spring", stiffness: 350, damping: 28 }}
                     />
@@ -528,7 +561,7 @@ export default function OgrenciPage() {
                       <Ikon
                         className={`size-4.5 transition-transform duration-200 ${aktif ? "scale-105" : "scale-100"}`}
                         style={{
-                          color: aktif ? "#1b4332" : "rgba(30, 41, 59, 0.70)",
+                          color: aktif ? accentHex : "rgba(30, 41, 59, 0.70)",
                           strokeWidth: aktif ? 2.3 : 1.85
                         }}
                       />
@@ -538,7 +571,7 @@ export default function OgrenciPage() {
                     </div>
                     <span
                       className={`text-[10px] tracking-tight leading-none text-center whitespace-nowrap transition-all duration-200 ${aktif ? "font-semibold" : "font-medium"}`}
-                      style={{ color: aktif ? "#1b4332" : "rgba(30, 41, 59, 0.70)" }}
+                      style={{ color: aktif ? accentHex : "rgba(30, 41, 59, 0.70)" }}
                     >
                       {item.ad}
                     </span>
@@ -551,22 +584,105 @@ export default function OgrenciPage() {
       </div>
 
       {secilenRozet && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setSecilenRozet(null)}
-        >
-          <div
-            className="bg-card border border-border rounded-xl p-5 w-full max-w-sm shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className={glass.overlay} onClick={() => setSecilenRozet(null)}>
+          <div className={glass.modal} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-medium text-sm text-foreground">{secilenRozet.ad}</h3>
-              <button onClick={() => setSecilenRozet(null)} className="text-muted-foreground hover:text-foreground text-sm">✕</button>
+              <button onClick={() => setSecilenRozet(null)} className="text-muted-foreground hover:text-foreground text-sm transition">✕</button>
             </div>
             <p className="text-sm text-muted-foreground">{secilenRozet.aciklama}</p>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ===== GERİ BİLDİRİM (yeni) =====
+function OgrenciGeriBildirim({ supabase }: { supabase: any }) {
+  const [mesaj, setMesaj] = useState('')
+  const [gonderiliyor, setGonderiliyor] = useState(false)
+  const [gonderildi, setGonderildi] = useState(false)
+
+  async function gonder() {
+    if (mesaj.trim().length < 5) {
+      toast.error('Lütfen biraz daha detay yaz (en az 5 karakter)')
+      return
+    }
+    setGonderiliyor(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) {
+      setGonderiliyor(false)
+      toast.error('Oturumunuz sona ermiş. Lütfen tekrar giriş yapın.')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/geri-bildirim', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ mesaj: mesaj.trim(), sayfa: 'ogrenci' }),
+      })
+      const sonuc = await response.json()
+      if (!response.ok) throw new Error(sonuc.hata || 'Mail gönderilemedi')
+
+      setMesaj('')
+      setGonderildi(true)
+    } catch (error: any) {
+      toast.error('Gönderilemedi: ' + error.message)
+    } finally {
+      setGonderiliyor(false)
+    }
+  }
+
+  return (
+    <div className={glass.card}>
+      <div className={glass.cardHead}>
+        <div className="flex items-center gap-2">
+          <MessageSquare className="size-4 text-muted-foreground" />
+          <h2 className="font-medium text-sm text-foreground">Geri Bildirim</h2>
+        </div>
+      </div>
+      <div className="px-5 py-5">
+        {gonderildi ? (
+          <div className="flex flex-col items-center text-center gap-3 py-6">
+            <CheckCircle2 className="size-9 text-primary" />
+            <p className="text-sm font-medium text-foreground">Teşekkürler, ilettik!</p>
+            <p className="text-xs text-muted-foreground max-w-xs">
+              Mesajın iletildi, en kısa sürede kontrol edilecek.
+            </p>
+            <button onClick={() => setGonderildi(false)} className={`${glass.btnSecondary} px-4 py-1.5 mt-1`}>
+              Yeni mesaj gönder
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground mb-3">
+              Bir hata mı gördün, bir şey mi çalışmıyor, ya da aklına bir öneri mi geldi? Anonim bir şekilde rahatça yaz.
+            </p>
+            <textarea
+              value={mesaj}
+              onChange={(e) => setMesaj(e.target.value)}
+              rows={6}
+              className={`${glass.input} resize-none`}
+              placeholder="Örn: Ödevler sekmesinde dosya yüklerken hata alıyorum..."
+            />
+            <div className="flex justify-end mt-3">
+              <button
+                onClick={gonder}
+                disabled={gonderiliyor || mesaj.trim().length === 0}
+                className={`${glass.btnPrimary} px-4 py-2 inline-flex items-center gap-2`}
+              >
+                <Send className="size-3.5" />
+                {gonderiliyor ? 'Gönderiliyor...' : 'Gönder'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -639,14 +755,14 @@ function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase:
   if (gunlereGore.length === 0) return null
 
   return (
-    <Card className="p-0 overflow-hidden">
-      <div className="px-5 py-4 border-b border-border">
+    <div className={glass.card}>
+      <div className="px-5 py-4 border-b border-white/50">
         <h2 className="font-medium text-sm text-foreground">Haftalık Ders Programı</h2>
       </div>
       <div className="overflow-x-auto">
         <div className="grid grid-cols-7 min-w-[600px]">
           {gunler.map(gun => (
-            <div key={gun} className="px-2 py-2 border-b border-r border-border bg-muted/50 last:border-r-0">
+            <div key={gun} className="px-2 py-2 border-b border-r border-white/50 bg-white/30 last:border-r-0">
               <p className="text-xs font-medium text-muted-foreground text-center">{gun.slice(0, 3)}</p>
             </div>
           ))}
@@ -655,18 +771,18 @@ function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase:
               .filter(d => d.gun === gun)
               .sort((a: any, b: any) => (a.saat || '').localeCompare(b.saat || ''))
             return (
-              <div key={gun} className="border-r border-border last:border-r-0 min-h-[120px] p-1.5 space-y-1">
+              <div key={gun} className="border-r border-white/50 last:border-r-0 min-h-[120px] p-1.5 space-y-1">
                 {gunDersleri.map((d: any) => {
                   const iptal = iptaller.find(i => i.ders_id === d.id)
                   const buHafta = dersbuHaftaVarMi(d)
                   return (
                     <div
                       key={d.id}
-                      className={`rounded-md px-2 py-1.5 text-xs ${
+                      className={`rounded-md px-2 py-1.5 text-xs backdrop-blur-sm ${
                         iptal
                           ? 'bg-destructive/10 text-destructive border border-destructive/20'
                           : !buHafta
-                          ? 'bg-muted text-muted-foreground border border-border opacity-50'
+                          ? 'bg-muted/60 text-muted-foreground border border-white/50 opacity-50'
                           : 'bg-primary/10 text-primary border border-primary/20'
                       }`}
                     >
@@ -682,7 +798,7 @@ function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase:
           })}
         </div>
       </div>
-    </Card>
+    </div>
   )
 }
 
@@ -783,11 +899,11 @@ function OgrenciOdevlerim({ ogrenciId, dersler, supabase }: { ogrenciId: string,
   if (yukleniyor || odevler.length === 0) return null
 
   return (
-    <Card className="p-0 overflow-hidden">
-      <div className="px-5 py-4 border-b border-border">
+    <div className={glass.card}>
+      <div className="px-5 py-4 border-b border-white/50">
         <h2 className="font-medium text-sm text-foreground">Ödevlerim</h2>
       </div>
-      <div className="divide-y divide-border">
+      <div className="divide-y divide-white/50">
         {odevler.map((o) => {
           const teslim = teslimler[o.id]
           const ders = dersler.find(d => d.id === o.ders_id)
@@ -815,7 +931,7 @@ function OgrenciOdevlerim({ ogrenciId, dersler, supabase }: { ogrenciId: string,
 
               <div className="mt-3">
                 {!teslim ? (
-                  <label className="inline-flex items-center gap-2 text-sm text-primary cursor-pointer hover:underline">
+                  <label className="inline-flex items-center gap-2 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-all duration-200 active:scale-95 rounded-lg px-3 py-1.5 cursor-pointer">
                     <input
                       type="file"
                       accept=".docx"
@@ -826,10 +942,10 @@ function OgrenciOdevlerim({ ogrenciId, dersler, supabase }: { ogrenciId: string,
                         if (file) dosyaYukle(o.id, o.ders_id, file)
                       }}
                     />
-                    {yukleniyorOdevId === o.id ? 'Yükleniyor...' : '📎 .docx dosyası yükle'}
+                    📎 {yukleniyorOdevId === o.id ? 'Yükleniyor...' : '.docx dosyası yükle'}
                   </label>
                 ) : (
-                  <div className="bg-muted rounded-lg px-3 py-2">
+                  <div className="bg-white/50 backdrop-blur-sm border border-white/60 rounded-xl px-3 py-2">
                     <p className="text-xs font-medium text-foreground">
                       ✓ Teslim edildi — {new Date(teslim.teslim_tarihi).toLocaleDateString('tr-TR')}
                     </p>
@@ -847,9 +963,9 @@ function OgrenciOdevlerim({ ogrenciId, dersler, supabase }: { ogrenciId: string,
                       <button
                         onClick={() => aiDegerlendir(teslim.id)}
                         disabled={aiYukleniyorId === teslim.id}
-                        className="text-xs text-primary hover:underline mt-1 disabled:opacity-50"
+                        className="text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-all duration-200 active:scale-95 rounded-lg px-2.5 py-1 mt-2 disabled:opacity-50 inline-flex items-center gap-1"
                       >
-                        {aiYukleniyorId === teslim.id ? 'Değerlendiriliyor...' : '✨ AI ile değerlendir'}
+                        ✨ {aiYukleniyorId === teslim.id ? 'Değerlendiriliyor...' : 'AI ile değerlendir'}
                       </button>
                     )}
                   </div>
@@ -859,11 +975,11 @@ function OgrenciOdevlerim({ ogrenciId, dersler, supabase }: { ogrenciId: string,
           )
         })}
       </div>
-    </Card>
+    </div>
   )
 }
 
-function OgrenciGelisimGrafigi({ ogrenciId, supabase }: { ogrenciId: string, supabase: any }) {
+function OgrenciGelisimGrafigi({ ogrenciId, supabase, accentHex }: { ogrenciId: string, supabase: any, accentHex: string }) {
   const [veri, setVeri] = useState<any[]>([])
   const [detay, setDetay] = useState<any[]>([])
   const [yukleniyor, setYukleniyor] = useState(true)
@@ -926,8 +1042,8 @@ function OgrenciGelisimGrafigi({ ogrenciId, supabase }: { ogrenciId: string, sup
   if (veri.length === 0) return null
 
   return (
-    <Card className="p-0 overflow-hidden">
-      <div className="px-5 py-4 border-b border-border">
+    <div className={glass.card}>
+      <div className="px-5 py-4 border-b border-white/50">
         <h2 className="font-medium text-sm text-foreground">Gelişim Grafiğim — Ödev Puanları</h2>
         <p className="text-xs text-muted-foreground mt-1">Dönemlere göre ödev puan ortalaman</p>
       </div>
@@ -940,11 +1056,11 @@ function OgrenciGelisimGrafigi({ ogrenciId, supabase }: { ogrenciId: string, sup
             <Tooltip
               formatter={(deger: any, isim: any) => (isim === 'ortalama' ? [`${deger}`, 'Ortalama Puan'] : [deger, isim])}
             />
-            <Line type="monotone" dataKey="ortalama" stroke="#344e41" strokeWidth={2} dot={{ r: 4 }} />
+            <Line type="monotone" dataKey="ortalama" stroke={accentHex} strokeWidth={2} dot={{ r: 4 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div className="border-t border-border divide-y divide-border">
+      <div className="border-t border-white/50 divide-y divide-white/50">
         {detay.map((d, i) => (
           <div key={i} className="px-5 py-2.5 flex items-center justify-between">
             <div>
@@ -955,7 +1071,7 @@ function OgrenciGelisimGrafigi({ ogrenciId, supabase }: { ogrenciId: string, sup
           </div>
         ))}
       </div>
-    </Card>
+    </div>
   )
 }
 
@@ -1005,8 +1121,8 @@ function OgrenciBuHaftaOzet({ ogrenciId, dersler, supabase }: { ogrenciId: strin
   if (bugunDersleri.length === 0 && yarinDersleri.length === 0 && yaklasanOdevler.length === 0) return null
 
   return (
-    <Card className="p-0 overflow-hidden">
-      <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
+    <div className={glass.card}>
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-white/50">
         <Sparkles className="size-4 text-muted-foreground" />
         <h2 className="font-medium text-sm text-foreground">Bu Hafta Ne Var?</h2>
       </div>
@@ -1038,7 +1154,7 @@ function OgrenciBuHaftaOzet({ ogrenciId, dersler, supabase }: { ogrenciId: strin
           </div>
         )}
       </div>
-    </Card>
+    </div>
   )
 }
 
@@ -1055,14 +1171,14 @@ function OgrenciKatilimYildonumu({ ogrenci }: { ogrenci: any }) {
   if (farkGun > 3) return null
 
   return (
-    <Card className="p-0 overflow-hidden bg-primary/5 border-primary/20">
+    <div className={`${glass.card} bg-primary/5`}>
       <div className="px-5 py-4 flex items-center gap-2">
         <span className="text-lg">🎉</span>
         <p className="text-sm text-foreground">
           Aramıza katılalı <span className="font-semibold">{yilFarki} yıl</span> oldu!
         </p>
       </div>
-    </Card>
+    </div>
   )
 }
 
@@ -1090,7 +1206,7 @@ function OgrenciDevamTrendMesaji({ dersler }: { dersler: any[] }) {
   if (fark === 0) return null
 
   return (
-    <Card className="p-0 overflow-hidden">
+    <div className={glass.card}>
       <div className="px-5 py-4 flex items-center gap-2.5">
         <TrendingUp className={`size-4 ${fark > 0 ? 'text-emerald-600' : 'text-muted-foreground'}`} />
         <p className="text-sm text-foreground">
@@ -1100,7 +1216,7 @@ function OgrenciDevamTrendMesaji({ dersler }: { dersler: any[] }) {
           }
         </p>
       </div>
-    </Card>
+    </div>
   )
 }
 
@@ -1130,13 +1246,13 @@ function SinifTopluluk({ dersler, supabase }: { dersler: any[], supabase: any })
   if (toplamTeslim === null || toplamTeslim === 0) return null
 
   return (
-    <Card className="p-0 overflow-hidden">
+    <div className={glass.card}>
       <div className="px-5 py-4 flex items-center gap-2.5">
         <Users className="size-4 text-muted-foreground" />
         <p className="text-sm text-foreground">
           Sınıfımız bu dönem toplam <span className="font-semibold">{toplamTeslim} ödev</span> teslim etti 🎉
         </p>
       </div>
-    </Card>
+    </div>
   )
 }
