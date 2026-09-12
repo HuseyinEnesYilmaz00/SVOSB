@@ -3,6 +3,7 @@ import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
+const feedbackRecipient = process.env.FEEDBACK_RECIPIENT_EMAIL
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -23,6 +24,9 @@ export async function POST(request: Request) {
     if (!accessToken) {
       return NextResponse.json({ hata: 'Oturum bulunamadı' }, { status: 401 })
     }
+    if (!feedbackRecipient) {
+      return NextResponse.json({ hata: 'Geri bildirim alıcısı yapılandırılmamış' }, { status: 503 })
+    }
 
     const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken)
     if (userError || !user?.email) {
@@ -31,7 +35,7 @@ export async function POST(request: Request) {
 
     await resend.emails.send({
       from: 'Siyer Vakfı Öğrenci Bilgi Sistemi <bildirim@mail.enesinsanaldefteri.com.tr>',
-      to: 'huseyinenesyilmaz@gmail.com',
+      to: feedbackRecipient,
       replyTo: user.email,
       subject: `Yeni Geri Bildirim — ${sayfa || 'bilinmiyor'}`,
       text: [
