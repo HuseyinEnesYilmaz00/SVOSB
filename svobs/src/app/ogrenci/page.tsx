@@ -759,7 +759,46 @@ function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase:
       <div className="px-5 py-4 border-b border-white/50">
         <h2 className="font-medium text-sm text-foreground">Haftalık Ders Programı</h2>
       </div>
-      <div className="overflow-x-auto">
+
+      {/* Mobil: günler alt alta liste */}
+      <div className="sm:hidden divide-y divide-white/50">
+        {gunlereGore.map(({ gun, dersler: gunDersleri }) => (
+          <div key={gun} className="px-4 py-3">
+            <p className="text-xs font-semibold text-muted-foreground mb-2">{gun}</p>
+            <div className="space-y-1.5">
+              {gunDersleri
+                .slice()
+                .sort((a: any, b: any) => (a.saat || '').localeCompare(b.saat || ''))
+                .map((d: any) => {
+                  const iptal = iptaller.find(i => i.ders_id === d.id)
+                  const buHafta = dersbuHaftaVarMi(d)
+                  return (
+                    <div
+                      key={d.id}
+                      className={`rounded-lg px-3 py-2 text-sm backdrop-blur-sm flex items-center justify-between gap-2 ${
+                        iptal
+                          ? 'bg-destructive/10 text-destructive border border-destructive/20'
+                          : !buHafta
+                          ? 'bg-muted/60 text-muted-foreground border border-white/50 opacity-60'
+                          : 'bg-primary/10 text-primary border border-primary/20'
+                      }`}
+                    >
+                      <div>
+                        <p className="font-medium leading-tight">{d.ad}</p>
+                        <p className="opacity-70 text-xs mt-0.5">{d.saat}</p>
+                      </div>
+                      {iptal && <span className="text-xs font-medium shrink-0">İptal</span>}
+                      {!buHafta && !iptal && <span className="text-xs shrink-0">Bu hafta yok</span>}
+                    </div>
+                  )
+                })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Masaüstü: 7 sütunlu tablo */}
+      <div className="hidden sm:block overflow-x-auto">
         <div className="grid grid-cols-7 min-w-[600px]">
           {gunler.map(gun => (
             <div key={gun} className="px-2 py-2 border-b border-r border-white/50 bg-white/30 last:border-r-0">
@@ -808,8 +847,7 @@ function OgrenciOdevlerim({ ogrenciId, dersler, supabase }: { ogrenciId: string,
   const [hocaNotlari, setHocaNotlari] = useState<Record<string, number>>({})
   const [yukleniyor, setYukleniyor] = useState(true)
   const [yukleniyorOdevId, setYukleniyorOdevId] = useState<string | null>(null)
-  const [aiYukleniyorId, setAiYukleniyorId] = useState<string | null>(null)
-
+  
   useEffect(() => {
     async function yukle() {
       if (!ogrenciId || dersler.length === 0) { setYukleniyor(false); return }
@@ -872,29 +910,6 @@ function OgrenciOdevlerim({ ogrenciId, dersler, supabase }: { ogrenciId: string,
     }
   }
 
-  async function aiDegerlendir(teslimId: string) {
-    setAiYukleniyorId(teslimId)
-    try {
-      const res = await fetch('/api/odev-ai-degerlendir', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teslimId })
-      })
-      const sonuc = await res.json()
-      if (!res.ok) throw new Error(sonuc.hata || 'Değerlendirme başarısız')
-
-      setTeslimler(prev => {
-        const odevId = Object.keys(prev).find(k => prev[k].id === teslimId)
-        if (!odevId) return prev
-        return { ...prev, [odevId]: sonuc.teslim }
-      })
-      toast.success('AI değerlendirmesi tamamlandı!')
-    } catch (err: any) {
-      toast.error('Hata: ' + err.message)
-    } finally {
-      setAiYukleniyorId(null)
-    }
-  }
 
   if (yukleniyor || odevler.length === 0) return null
 
@@ -954,20 +969,7 @@ function OgrenciOdevlerim({ ogrenciId, dersler, supabase }: { ogrenciId: string,
                         Öğretmen Notu: {hocaNotlari[o.id]}
                       </p>
                     )}
-                    {teslim.ai_degerlendirildi ? (
-                      <div className="mt-2">
-                        <p className="text-xs text-muted-foreground font-medium">AI Değerlendirmesi</p>
-                        <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{teslim.ai_degerlendirme}</p>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => aiDegerlendir(teslim.id)}
-                        disabled={aiYukleniyorId === teslim.id}
-                        className="text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-all duration-200 active:scale-95 rounded-lg px-2.5 py-1 mt-2 disabled:opacity-50 inline-flex items-center gap-1"
-                      >
-                        ✨ {aiYukleniyorId === teslim.id ? 'Değerlendiriliyor...' : 'AI ile değerlendir'}
-                      </button>
-                    )}
+                    
                   </div>
                 )}
               </div>

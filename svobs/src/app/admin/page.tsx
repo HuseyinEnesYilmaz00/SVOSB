@@ -232,13 +232,13 @@ export default function AdminPage() {
               <OgrencilerSekme programId={aktifProgram?.id} supabase={supabase} tema={tema} />
             )}
             {aktifSekme === "siniflar" && (
-              <SiniflarSekme programId={aktifProgram?.id} supabase={supabase} />
+              <SiniflarSekme programId={aktifProgram?.id} supabase={supabase} tema={tema} />
             )}
             {aktifSekme === "dersler" && (
               <DerslerSekme programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
             )}
             {aktifSekme === "yoklama" && (
-              <YoklamaSekmesi programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} />
+              <YoklamaSekmesi programId={aktifProgram?.id} supabase={supabase} kullanici={kullanici} tema={tema} />
             )}
             {aktifSekme === "notlar" && (
               <NotlarSekmesi programId={aktifProgram?.id} supabase={supabase} />
@@ -419,7 +419,7 @@ export default function AdminPage() {
 }
 
 // ===== SINIFLAR =====
-function SiniflarSekme({ programId, supabase }: { programId: string, supabase: any }) {
+function SiniflarSekme({ programId, supabase, tema }: { programId: string, supabase: any, tema: string }) {
   const [siniflar, setSiniflar] = useState<any[]>([])
   const [yukleniyor, setYukleniyor] = useState(true)
   const [modalAcik, setModalAcik] = useState(false)
@@ -508,6 +508,92 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
           toast.success('Sınıf başarıyla aktif edildi!')
           yukle()
         },
+      },
+      cancel: { label: 'Vazgeç', onClick: () => {} },
+    })
+  }
+
+  function sonrakiDonemBilgisi(s: any): { yeniDonem: string, yeniYariyil: string } {
+    const yariyil = s.yariyil === 'bahar' ? 'bahar' : 'guz'
+    if (yariyil === 'guz') {
+      return { yeniDonem: s.donem, yeniYariyil: 'bahar' }
+    }
+    const eslesme = s.donem?.match(/(\d{4})/)
+    const baslangicYili = eslesme ? parseInt(eslesme[1], 10) : new Date().getFullYear()
+    return { yeniDonem: `${baslangicYili + 1}-${baslangicYili + 2}`, yeniYariyil: 'guz' }
+  }
+
+  async function sinifiYeniDonemeGecir(s: any) {
+    const { yeniDonem, yeniYariyil } = sonrakiDonemBilgisi(s)
+    const { data: yeniSinif, error: olusturmaHata } = await supabase
+      .from('siniflar')
+      .insert({ program_id: programId, ad: s.ad, donem: yeniDonem, yariyil: yeniYariyil, arsivlendi: false })
+      .select()
+      .single()
+
+    if (olusturmaHata || !yeniSinif) {
+      toast.error('Yeni sınıf oluşturulamadı: ' + (olusturmaHata?.message || 'bilinmeyen hata'))
+      return false
+    }
+
+    const { error: tasimaHata } = await supabase
+      .from('ogrenciler')
+      .update({ sinif_id: yeniSinif.id })
+      .eq('sinif_id', s.id)
+      .eq('aktif', true)
+
+    if (tasimaHata) {
+      toast.error('Öğrenciler taşınamadı: ' + tasimaHata.message)
+      return false
+    }
+
+    const { error: arsivHata } = await supabase
+      .from('siniflar')
+      .update({ arsivlendi: true })
+      .eq('id', s.id)
+
+    if (arsivHata) {
+      toast.error('Eski sınıf arşivlenemedi: ' + arsivHata.message)
+      return false
+    }
+
+    return true
+  }
+
+  function yeniDonemeGecisBaslat(s: any) {
+    toast(`"${s.ad}" yeni döneme geçirilecek`, {
+      description: 'Eski sınıf tüm ders/yoklama/not/ödev kayıtlarıyla arşive kaldırılacak. Aynı isimle boş bir yeni sınıf açılacak, aktif öğrenciler oraya taşınacak. Bu işlem geri alınamaz.',
+      action: {
+        label: 'Yeni Döneme Geçir',
+        onClick: async () => {
+          const basarili = await sinifiYeniDonemeGecir(s)
+          if (basarili) {
+            toast.success(`"${s.ad}" yeni döneme geçirildi!`)
+            yukle()
+          }
+        },
+      },
+      cancel: { label: 'Vazgeç', onClick: () => {} },
+    })
+  }
+
+  async function tumSiniflariYeniDonemeGecir() {
+    setYukleniyor(true)
+    let basariliSayisi = 0
+    for (const s of siniflar) {
+      const basarili = await sinifiYeniDonemeGecir(s)
+      if (basarili) basariliSayisi++
+    }
+    toast.success(`${basariliSayisi} / ${siniflar.length} sınıf yeni döneme geçirildi`)
+    yukle()
+  }
+
+  function tumSiniflariYeniDonemeGecisBaslat() {
+    toast(`Bu programdaki TÜM sınıflar (${siniflar.length}) yeni döneme geçirilecek`, {
+      description: 'Her sınıf ayrı ayrı arşivlenecek, aynı isimlerle boş yeni sınıflar açılacak, aktif öğrenciler taşınacak.',
+      action: {
+        label: 'Hepsini Geçir',
+        onClick: tumSiniflariYeniDonemeGecir,
       },
       cancel: { label: 'Vazgeç', onClick: () => {} },
     })
@@ -610,12 +696,22 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
             >
               {arsivGoster ? 'Aktif Sınıflar' : 'Arşivlenenleri Gör'}
             </button>
+            
+
             {!arsivGoster && (
               <button
                 onClick={() => setModalAcik(true)}
                 className="glass-btn-primary"
               >
                 + Sınıf Ekle
+              </button>
+            )}
+            {!arsivGoster && siniflar.length > 0 && (
+              <button
+                onClick={tumSiniflariYeniDonemeGecisBaslat}
+                className="glass-btn-secondary"
+              >
+                Tüm Sınıfları Yeni Döneme Geçir
               </button>
             )}
           </div>
@@ -639,11 +735,19 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
               {siniflar.map((s) => (
                 <tr key={s.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm font-medium text-gray-800">{s.ad}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{guncelDonem(s.donem)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500">
+                    {s.donem} {s.yariyil === 'bahar' ? 'Bahar' : 'Güz'}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-3 flex-wrap">
                       {!arsivGoster ? (
                         <>
+                          <button
+                            onClick={() => yeniDonemeGecisBaslat(s)}
+                            className={tema === 'esma' ? "text-[#a53860] text-xs font-medium hover:text-[#a53860]/80" : "text-green-600 text-xs font-medium hover:text-green-800"}
+                          >
+                            Yeni Döneme Geçir
+                          </button>
                           <button
                             onClick={() => sinifArsivle(s.id)}
                             className="text-blue-600 text-xs font-medium hover:text-blue-800"
@@ -667,7 +771,7 @@ function SiniflarSekme({ programId, supabase }: { programId: string, supabase: a
                           </button>
                           <button
                             onClick={() => sinifArsivdenCikar(s.id)}
-                            className="text-green-600 text-xs font-medium hover:text-green-800"
+                            className={tema === 'esma' ? "text-[#a53860] text-xs font-medium hover:text-[#a53860]/80" : "text-green-600 text-xs font-medium hover:text-green-800"}
                           >
                             Çıkar
                           </button>
@@ -886,6 +990,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
     const { data: s } = await supabase.from('siniflar').select('*').eq('program_id', programId).order('ad')
     setSiniflar(s || [])
     const sinifIdleri = (s || []).map((sinif: any) => sinif.id)
+    const aktifSinifIdleri = (s || []).filter((sinif: any) => !sinif.arsivlendi).map((sinif: any) => sinif.id)
 
     const { data: o } = sinifIdleri.length > 0
       ? await supabase.from('ogrenciler').select(`
@@ -900,19 +1005,30 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
 
     if (o && o.length > 0) {
       const ogrenciIdleri = o.map((og: any) => og.id)
-      const { data: tumNotlar } = await supabase.from('notlar').select('ogrenci_id, puan').in('ogrenci_id', ogrenciIdleri)
-      const { data: tumYoklamalar } = await supabase.from('yoklamalar').select('ogrenci_id, durum').in('ogrenci_id', ogrenciIdleri)
+
+      const { data: aktifDersler } = aktifSinifIdleri.length > 0
+        ? await supabase.from('dersler').select('id').in('sinif_id', aktifSinifIdleri)
+        : { data: [] }
+      const aktifDersIdleri = (aktifDersler || []).map((d: any) => d.id)
+
       const devamPuanlari: Record<string, number> = { katildi: 100, gec: 0, izinli: 0, katilmadi: 0 }
       const yeniOrtalamalar: Record<string, number | null> = {}
-      for (const id of ogrenciIdleri) {
-        const notlariBu = (tumNotlar || []).filter((n: any) => n.ogrenci_id === id)
-        const yoklamalariBu = (tumYoklamalar || []).filter((y: any) => y.ogrenci_id === id)
-        const sinavOrt = notlariBu.length > 0 ? notlariBu.reduce((s: number, n: any) => s + n.puan, 0) / notlariBu.length : null
-        const devamOrt = yoklamalariBu.length > 0 ? yoklamalariBu.reduce((s: number, y: any) => s + (devamPuanlari[y.durum] || 0), 0) / yoklamalariBu.length : null
-        if (sinavOrt === null && devamOrt === null) yeniOrtalamalar[id] = null
-        else if (sinavOrt === null) yeniOrtalamalar[id] = devamOrt
-        else if (devamOrt === null) yeniOrtalamalar[id] = sinavOrt
-        else yeniOrtalamalar[id] = sinavOrt * 0.5 + devamOrt * 0.5
+
+      if (aktifDersIdleri.length === 0) {
+        for (const id of ogrenciIdleri) yeniOrtalamalar[id] = null
+      } else {
+        const { data: tumNotlar } = await supabase.from('notlar').select('ogrenci_id, puan').in('ogrenci_id', ogrenciIdleri).in('ders_id', aktifDersIdleri)
+        const { data: tumYoklamalar } = await supabase.from('yoklamalar').select('ogrenci_id, durum').in('ogrenci_id', ogrenciIdleri).in('ders_id', aktifDersIdleri)
+        for (const id of ogrenciIdleri) {
+          const notlariBu = (tumNotlar || []).filter((n: any) => n.ogrenci_id === id)
+          const yoklamalariBu = (tumYoklamalar || []).filter((y: any) => y.ogrenci_id === id)
+          const sinavOrt = notlariBu.length > 0 ? notlariBu.reduce((s: number, n: any) => s + n.puan, 0) / notlariBu.length : null
+          const devamOrt = yoklamalariBu.length > 0 ? yoklamalariBu.reduce((s: number, y: any) => s + (devamPuanlari[y.durum] || 0), 0) / yoklamalariBu.length : null
+          if (sinavOrt === null && devamOrt === null) yeniOrtalamalar[id] = null
+          else if (sinavOrt === null) yeniOrtalamalar[id] = devamOrt
+          else if (devamOrt === null) yeniOrtalamalar[id] = sinavOrt
+          else yeniOrtalamalar[id] = sinavOrt * 0.5 + devamOrt * 0.5
+        }
       }
       setOrtalamalar(yeniOrtalamalar)
     }
@@ -1046,7 +1162,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
 
   if (yukleniyor) return (
     <div className="flex items-center justify-center py-20">
-      <div className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+      <div className={`w-6 h-6 border-2 border-t-transparent rounded-full animate-spin ${tema === 'esma' ? 'border-[#a53860]' : 'border-emerald-600'}`} />
     </div>
   )
 
@@ -1133,7 +1249,7 @@ function OgrencilerSekme({ programId, supabase, tema }: { programId: string, sup
                           </>
                         ) : (
                           <>
-                            <button onClick={() => ogrenciAktifEt(o)} className="text-green-600 text-xs font-medium hover:text-green-800">Aktif Et</button>
+                            <button onClick={() => ogrenciAktifEt(o)} className={tema === 'esma' ? "text-[#a53860] text-xs font-medium hover:text-[#a53860]/80" : "text-green-600 text-xs font-medium hover:text-green-800"}>Aktif Et</button>
                             <button onClick={() => ogrenciKaliciSil(o)} className={ui.btnDanger}>Kalıcı Sil</button>
                           </>
                         )}
@@ -1966,7 +2082,7 @@ function HocalarSekme({ programId, supabase }: { programId: string, supabase: an
   )
 }
 // ===== YOKLAMA =====
-function YoklamaSekmesi({ programId, supabase, kullanici }: { programId: string, supabase: any, kullanici: any }) {
+function YoklamaSekmesi({ programId, supabase, kullanici, tema }: { programId: string, supabase: any, kullanici: any, tema: string }) {
   const [siniflar, setSiniflar] = useState<any[]>([])
   const [dersler, setDersler] = useState<any[]>([])
   const [ogrenciler, setOgrenciler] = useState<any[]>([])
