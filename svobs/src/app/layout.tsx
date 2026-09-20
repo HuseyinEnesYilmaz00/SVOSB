@@ -18,14 +18,11 @@ export const metadata: Metadata = {
   title: "Siyer Öğrenci Bilgi Sistemi",
   description: "Siyer Öğrenci Bilgi Sistemi — ders programı, ödevler, notlar ve devam takibi.",
   manifest: "/manifest.json",
-  icons: {
-    icon: "/favicon.svg?v=2",
-    apple: "/pwa-icon.svg?v=2",
-  },
+  themeColor: "#ffffff",
 };
 
 export const viewport = {
-  themeColor: "#344e41",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({

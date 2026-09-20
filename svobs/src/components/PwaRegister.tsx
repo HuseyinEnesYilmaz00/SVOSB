@@ -1,22 +1,63 @@
 'use client'
 
 import { useEffect } from 'react'
+import { createClient } from '@/lib/supabase'
+
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = atob(base64)
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)))
+}
+
+async function pushAbonesiOlustur(registration: ServiceWorkerRegistration) {
+  try {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    let permission = Notification.permission
+    if (permission === 'default') {
+      permission = await Notification.requestPermission()
+    }
+    if (permission !== 'granted') return
+
+    let subscription = await registration.pushManager.getSubscription()
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      })
+    }
+
+    await fetch('/api/push-abone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kullaniciId: user.id, subscription: subscription.toJSON() }),
+    })
+  } catch (err) {
+    console.log('Push abonelik hatası:', err)
+  }
+}
 
 export function PwaRegister() {
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      window.addEventListener('load', function() {
+      window.addEventListener('load', function () {
         navigator.serviceWorker.register('/sw.js').then(
-          function(registration) {
-            console.log('PWA Service Worker başarıyla kaydedildi:', registration.scope);
+          function (registration) {
+            console.log('PWA Service Worker başarıyla kaydedildi:', registration.scope)
+            pushAbonesiOlustur(registration)
           },
-          function(err) {
-            console.log('PWA Service Worker kayıt hatası:', err);
+          function (err) {
+            console.log('PWA Service Worker kayıt hatası:', err)
           }
-        );
-      });
+        )
+      })
     }
-  }, []);
+  }, [])
 
-  return null;
+  return null
 }
