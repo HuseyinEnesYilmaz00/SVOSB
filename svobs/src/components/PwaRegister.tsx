@@ -6,8 +6,8 @@ import { BellRing, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
-const SERVICE_WORKER_URL = '/sw.js?v=push-7'
-const SERVICE_WORKER_VERSION = 'push-7'
+const SERVICE_WORKER_URL = '/sw.js?v=push-8'
+const SERVICE_WORKER_VERSION = 'push-8'
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -150,7 +150,7 @@ export function PwaRegister() {
     const basarili = await pushAbonesiOlustur(registration)
     setBekliyor(false)
     setIzinIstenebilir(!basarili)
-    if (basarili) toast.success('Duyuru bildirimleri açıldı.')
+    if (basarili) toast.success('Duyuru ve yoklama bildirimleri açıldı.')
     else toast.error('Bildirimler şu anda açılamadı. Lütfen tekrar dene.')
   }
 
@@ -161,7 +161,7 @@ export function PwaRegister() {
       <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><BellRing className="size-5" /></span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-foreground">Duyurulardan anında haberdar ol</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">Yeni duyurular için cihaz bildirimlerini aç.</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">Yeni duyurular ve yoklama hatırlatmaları için cihaz bildirimlerini aç.</p>
       </div>
       <button type="button" onClick={bildirimleriAc} disabled={bekliyor} className="min-h-10 shrink-0 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-60">
         {bekliyor ? 'Açılıyor…' : 'Bildirimleri aç'}

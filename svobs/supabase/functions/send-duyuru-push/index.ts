@@ -1,14 +1,5 @@
-// supabase/functions/send-duyuru-push/index.ts olarak konmalı.
-// Tetikleyici: Supabase Dashboard > Database > Webhooks
-//   Table: duyurular, Event: Insert, Type: Supabase Edge Function, Function: send-duyuru-push
-//
-// Gerekli secret'lar (supabase secrets set ile):
-//   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY  (npx web-push generate-vapid-keys ile üret)
-// SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY zaten Edge Function ortamında hazır gelir.
-//
-// NOT: web-push paketinin Deno'nun npm uyumluluk katmanında (npm: specifier) tam
-// sorunsuz çalıştığını buradan doğrulayamıyorum — deploy etmeden önce
-// `supabase functions serve send-duyuru-push` ile lokal test etmen lazım.
+// Duyuru ekleme webhook'u bu fonksiyonu çağırır. VAPID anahtarları Supabase
+// Edge Function secret'larında tutulur; kaynak koduna yazılmaz.
 
 import webpush from "npm:web-push@3.6.7"
 import { Buffer } from "node:buffer"
@@ -22,7 +13,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
 webpush.setVapidDetails(
-  "mailto:huseyinenesyilmaz@gmail.com",
+  "mailto:siyeregitimbirim@gmail.com",
   VAPID_PUBLIC_KEY,
   VAPID_PRIVATE_KEY
 )

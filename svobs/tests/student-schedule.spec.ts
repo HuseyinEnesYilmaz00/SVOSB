@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { occursOn, dateKey, fortnightDates, weekDates } from '../src/components/student/weekly-schedule'
+import { occursOn, dateKey, fortnightDates, lessonsForDate, weekDates } from '../src/components/student/weekly-schedule'
 
 test('calendar dates and repeated lessons respect their start date', () => {
   const lesson = { id: 'test', ad: 'Ders', gun: 'Perşembe', saat: '14:00', periyot: '2haftada1', baslangic_tarihi: '2026-09-17' }
@@ -11,6 +11,13 @@ test('calendar dates and repeated lessons respect their start date', () => {
     '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25', '2026-09-26', '2026-09-27',
     '2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04',
   ])
+})
+
+test('alternating lessons are hidden in their off week and shown in their active week', () => {
+  const lesson = { id: 'alternate', ad: 'İki Haftalık Ders', gun: 'Cumartesi', saat: '10:00', periyot: '2haftada1', baslangic_tarihi: '2026-10-17' }
+
+  expect(lessonsForDate([lesson], new Date(2026, 9, 24))).toEqual([])
+  expect(lessonsForDate([lesson], new Date(2026, 9, 31))).toEqual([lesson])
 })
 
 test('student schedule fits phones, supports day and week views, and shows account safely', async ({ page }) => {

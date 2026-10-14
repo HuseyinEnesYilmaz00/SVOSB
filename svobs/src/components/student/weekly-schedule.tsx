@@ -39,6 +39,13 @@ export function occursOn(lesson: ScheduleLesson, date: Date) {
   return weeks % interval === 0
 }
 
+export function lessonsForDate(lessons: ScheduleLesson[], date: Date) {
+  const day = weekDays[(date.getDay() + 6) % 7]
+  return lessons
+    .filter(lesson => lesson.gun === day && occursOn(lesson, date))
+    .sort((a, b) => (a.saat || '99').localeCompare(b.saat || '99'))
+}
+
 export function WeeklySchedule({ lessons, cancellations, today = new Date() }: {
   lessons: ScheduleLesson[]; cancellations: ScheduleCancellation[]; today?: Date
 }) {
@@ -50,11 +57,11 @@ export function WeeklySchedule({ lessons, cancellations, today = new Date() }: {
     const day = weekDays[index % 7]
     return {
       day, date, index,
-      lessons: lessons.filter(lesson => lesson.gun === day).sort((a, b) => (a.saat || '99').localeCompare(b.saat || '99')),
+      lessons: lessonsForDate(lessons, date),
     }
   })
   const isCancelled = (lesson: ScheduleLesson, date: Date) => cancellations.some(item => item.ders_id === lesson.id && item.tarih.slice(0, 10) === dateKey(date))
-  const count = (index: number) => groups[index].lessons.filter(lesson => occursOn(lesson, dates[index]) && !isCancelled(lesson, dates[index])).length
+  const count = (index: number) => groups[index].lessons.filter(lesson => !isCancelled(lesson, dates[index])).length
   const total = groups.reduce((sum, group) => sum + count(group.index), 0)
   const formatDate = (date: Date) => date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })
 
@@ -95,10 +102,9 @@ export function WeeklySchedule({ lessons, cancellations, today = new Date() }: {
               </div>
             ) : <div className="space-y-3">{group.lessons.map(lesson => {
               const cancelled = isCancelled(lesson, group.date)
-              const active = occursOn(lesson, group.date)
               const teachers = lesson.ogretmen_adi || lesson.ogretmen_dersleri?.flatMap(item => item.kullanicilar ? [`${item.kullanicilar.ad} ${item.kullanicilar.soyad}`] : []).join(', ')
               return (
-                <article key={lesson.id} className={`flex gap-3 rounded-2xl border p-3 sm:gap-4 sm:p-4 ${cancelled ? 'border-destructive/20 bg-destructive/5' : !active ? 'border-border bg-muted/30' : 'border-primary/10 bg-primary/[0.025]'}`}>
+                <article key={lesson.id} className={`flex gap-3 rounded-2xl border p-3 sm:gap-4 sm:p-4 ${cancelled ? 'border-destructive/20 bg-destructive/5' : 'border-primary/10 bg-primary/[0.025]'}`}>
                   <div className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-border/70 pr-3 pt-1 sm:w-16">
                     <Clock3 className="size-3.5 text-muted-foreground" />
                     <span className="text-sm font-semibold tabular-nums">{lesson.saat?.slice(0, 5) || '—'}</span>
@@ -106,7 +112,7 @@ export function WeeklySchedule({ lessons, cancellations, today = new Date() }: {
                   <div className="min-w-0 flex-1">
                     <h3 className="break-words text-sm font-semibold leading-relaxed">{lesson.ad}</h3>
                     {teachers && <p className="mt-1 flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"><UserRound className="mt-0.5 size-3 shrink-0" /><span className="break-words">{teachers}</span></p>}
-                    <span className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium ${cancelled ? 'bg-destructive/10 text-destructive' : !active ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'}`}><BookOpen className="size-3" />{cancelled ? 'Ders iptal edildi' : !active ? 'Bu hafta yapılmıyor' : 'Ders var'}</span>
+                    <span className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium ${cancelled ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary'}`}><BookOpen className="size-3" />{cancelled ? 'Ders iptal edildi' : 'Ders var'}</span>
                   </div>
                 </article>
               )

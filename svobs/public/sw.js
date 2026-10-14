@@ -10,7 +10,7 @@ self.addEventListener('activate', (event) => {
       try {
         const url = new URL(client.url);
         if (!url.pathname.startsWith('/ogrenci') || !('navigate' in client)) return Promise.resolve();
-        url.searchParams.set('uygulama-surumu', 'push-7');
+        url.searchParams.set('uygulama-surumu', 'push-8');
         return client.navigate(url.toString()).then(() => undefined);
       } catch {
         return Promise.resolve();
@@ -22,7 +22,7 @@ self.addEventListener('activate', (event) => {
 // ---- Duyuru push bildirimleri ----
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'Yeni Duyuru', body: '' };
+  let data = { title: 'Yeni bildirim', body: '' };
   try {
     if (event.data) data = event.data.json();
   } catch {
@@ -30,13 +30,13 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil(Promise.all([
-    self.registration.showNotification(data.title || 'Yeni Duyuru', {
+    self.registration.showNotification(data.title || 'Yeni bildirim', {
       body: data.body || '',
       // Android küçük simgede `badge`, sağdaki renkli görselde `icon` kullanır.
       // Her ikisi de yazısız, kare ve kendi alanı için hazırlanmış varlıklardır.
-      badge: '/icons/notification-badge.png?v=push-7',
-      icon: '/icons/notification-icon.png?v=push-7',
-      tag: data.duyuruId ? `duyuru-${data.duyuruId}` : 'yeni-duyuru',
+      badge: '/icons/notification-badge.png?v=push-8',
+      icon: '/icons/notification-icon.png?v=push-8',
+      tag: data.tag || (data.duyuruId ? `duyuru-${data.duyuruId}` : 'yeni-bildirim'),
       renotify: true,
       data: { url: data.url || '/ogrenci?sekme=duyurular', duyuruId: data.duyuruId || null },
     }),
