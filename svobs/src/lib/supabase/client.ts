@@ -11,7 +11,18 @@ function assertSupabaseEnv() {
   return { supabaseUrl, supabaseKey }
 }
 
+let browserClient: ReturnType<typeof createBrowserClient> | undefined
+
 export function createClient() {
   const { supabaseUrl, supabaseKey } = assertSupabaseEnv()
-  return createBrowserClient(supabaseUrl, supabaseKey)
+  if (!browserClient) {
+    browserClient = createBrowserClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    })
+  }
+  return browserClient
 }

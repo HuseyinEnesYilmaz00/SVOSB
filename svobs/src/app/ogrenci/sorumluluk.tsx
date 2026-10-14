@@ -3,10 +3,10 @@ import { toast } from 'sonner'
 
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { ClipboardList } from 'lucide-react'
+import { dateKey, occursOn } from '@/components/student/weekly-schedule'
 
 const STATUS_TONE: Record<string, string> = {
   katildi: 'bg-primary/12 text-primary border-primary/20',
@@ -15,19 +15,23 @@ const STATUS_TONE: Record<string, string> = {
   katilmadi: 'bg-destructive/12 text-destructive border-destructive/25',
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  katildi: 'Katıldı', gec: 'Geç', izinli: 'İzinli', katilmadi: 'Katılmadı',
-}
-
-export function SorumlulukPaneli({ ogrenciId, dersler, supabase }: {
+export function SorumlulukPaneli({ dersler, supabase }: {
   ogrenciId: string, dersler: any[], supabase: any
 }) {
   const [secilenDers, setSecilenDers] = useState<any>(dersler[0])
   const [sinifOgrencileri, setSinifOgrencileri] = useState<any[]>([])
-  const [tarih, setTarih] = useState(new Date().toISOString().split('T')[0])
+  const [tarih, setTarih] = useState(() => dateKey(new Date()))
   const [yoklamalar, setYoklamalar] = useState<Record<string, string>>({})
   const [mevcutYoklamalar, setMevcutYoklamalar] = useState<any[]>([])
   const [kaydediyor, setKaydediyor] = useState(false)
+
+  const bugun = new Date()
+  const dun = new Date(bugun.getFullYear(), bugun.getMonth(), bugun.getDate() - 1)
+  const dersBilgisi = secilenDers?.dersler
+  const secilenGun = tarih ? new Date(`${tarih}T00:00:00`) : null
+  const planlananZaman = tarih && dersBilgisi?.saat ? new Date(`${tarih}T${dersBilgisi.saat.slice(0, 5)}:00`) : null
+  const tarihDerseUygun = !!(secilenGun && dersBilgisi && dersBilgisi.gun === ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'][secilenGun.getDay()] && occursOn({ id: secilenDers.ders_id, ...dersBilgisi }, secilenGun))
+  const pencereAcik = !!(planlananZaman && tarihDerseUygun && bugun >= planlananZaman && bugun.getTime() <= planlananZaman.getTime() + 24 * 60 * 60 * 1000)
 
   useEffect(() => {
     async function yukle() {
@@ -62,16 +66,33 @@ export function SorumlulukPaneli({ ogrenciId, dersler, supabase }: {
   }, [secilenDers, tarih])
 
   async function kaydet() {
-    setKaydediyor(true)
-    for (const o of sinifOgrencileri) {
-      const durum = yoklamalar[o.id]
-      if (!durum) continue
-      const mevcut = mevcutYoklamalar.find(y => y.ogrenci_id === o.id)
-      if (mevcut) { toast('Kaydedilmiş yoklamayı sadece admin değiştirebilir!'); continue }
-      await supabase.from('yoklamalar').insert({ ogrenci_id: o.id, ders_id: secilenDers.ders_id, tarih, durum })
+    if (kaydediyor || !secilenDers) return
+    if (!pencereAcik) {
+      toast.error('Yoklama, ders saatinden sonra 24 saat içinde girilebilir.')
+      return
     }
-    setKaydediyor(false)
-    toast('Yoklama kaydedildi!')
+    setKaydediyor(true)
+    try {
+      const { data: existing, error: readError } = await supabase.from('yoklamalar').select('id, ogrenci_id')
+        .eq('ders_id', secilenDers.ders_id).eq('tarih', tarih)
+      if (readError) throw readError
+      const ids = new Set((existing || []).map((row: { ogrenci_id: string }) => row.ogrenci_id))
+      const rows = sinifOgrencileri.filter(o => yoklamalar[o.id] && !ids.has(o.id)).map(o => ({
+        ogrenci_id: o.id, ders_id: secilenDers.ders_id, tarih, durum: yoklamalar[o.id],
+      }))
+      if (rows.length) {
+        const { error } = await supabase.from('yoklamalar').insert(rows)
+        if (error) throw error
+      }
+      const { data, error } = await supabase.from('yoklamalar').select('*').eq('ders_id', secilenDers.ders_id).eq('tarih', tarih)
+      if (error) throw error
+      setMevcutYoklamalar(data || [])
+      toast.success(rows.length ? 'Yoklama kaydedildi!' : 'Yeni yoklama bulunmuyor; mevcut kayıtlar korundu.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Yoklama kaydedilemedi.')
+    } finally {
+      setKaydediyor(false)
+    }
   }
 
   const durumlar = [
@@ -110,18 +131,25 @@ export function SorumlulukPaneli({ ogrenciId, dersler, supabase }: {
         <p className="text-sm font-medium text-foreground">{secilenDers?.dersler?.ad} — Yoklama</p>
         <div className="flex items-center gap-2">
           <input type="date" value={tarih} onChange={(e) => setTarih(e.target.value)}
+            min={dateKey(dun)} max={dateKey(bugun)}
             className="h-8 px-2 rounded-lg border border-input text-sm outline-none focus:border-ring" />
-          <Button size="sm" onClick={kaydet} disabled={kaydediyor}>
+          <Button size="sm" onClick={kaydet} disabled={kaydediyor || !pencereAcik}>
             {kaydediyor ? 'Kaydediliyor...' : 'Kaydet'}
           </Button>
         </div>
       </div>
 
+      {!pencereAcik && (
+        <p className="border-b border-border bg-amber-50 px-5 py-2 text-xs text-amber-800">
+          {tarihDerseUygun ? 'Yoklama penceresi ders saatinde açılır ve 24 saat sonra kapanır.' : 'Seçilen tarihte bu ders yapılmıyor.'}
+        </p>
+      )}
+
       <div className="divide-y divide-border">
         {sinifOgrencileri.map((o) => (
           <div key={o.id} className="flex items-center justify-between px-5 py-3">
             <span className="text-sm text-foreground">
-              #{o.numara} {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
+              {o.kullanicilar?.ad} {o.kullanicilar?.soyad}
             </span>
             <div className="flex gap-1">
               {durumlar.map((d) => (

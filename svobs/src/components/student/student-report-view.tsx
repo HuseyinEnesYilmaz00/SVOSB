@@ -36,11 +36,9 @@ interface Ders {
 export function StudentReportView({
   dersler,
   genelOrtalama,
-  ogrenciNo,
 }: {
   dersler: Ders[]
   genelOrtalama: number | null
-  ogrenciNo: number | null
 }) {
   return (
     <div className="flex flex-col gap-6">
@@ -57,11 +55,6 @@ export function StudentReportView({
             </span>
           </div>
         </div>
-        {ogrenciNo ? (
-          <Badge variant="outline" className="w-fit text-muted-foreground">
-            Öğrenci No: {ogrenciNo}
-          </Badge>
-        ) : null}
       </Card>
 
       {dersler.length === 0 ? (

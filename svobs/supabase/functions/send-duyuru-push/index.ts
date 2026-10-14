@@ -11,14 +11,18 @@
 // `supabase functions serve send-duyuru-push` ile lokal test etmen lazım.
 
 import webpush from "npm:web-push@3.6.7"
+import { Buffer } from "node:buffer"
+import { createECDH } from "node:crypto"
 
-const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY")!
 const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY")!
+const vapidEcdh = createECDH("prime256v1")
+vapidEcdh.setPrivateKey(Buffer.from(VAPID_PRIVATE_KEY, "base64url"))
+const VAPID_PUBLIC_KEY = vapidEcdh.getPublicKey().toString("base64url")
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
 webpush.setVapidDetails(
-  "huseyinenesyilmaz@gmail.com", // gerçek bir iletişim adresiyle değiştir
+  "mailto:huseyinenesyilmaz@gmail.com",
   VAPID_PUBLIC_KEY,
   VAPID_PRIVATE_KEY
 )
@@ -46,16 +50,17 @@ Deno.serve(async (req) => {
         { headers: restHeaders }
       )
       const rows = await res.json()
-      kullaniciIdleri = rows.map((r: any) => r.kullanici_id)
+      kullaniciIdleri = Array.isArray(rows) ? rows.map((r: any) => r.kullanici_id) : []
     } else {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/ogrenciler?select=kullanici_id,siniflar!inner(program_id)&siniflar.program_id=eq.${duyuru.program_id}&aktif=eq.true`,
         { headers: restHeaders }
       )
       const rows = await res.json()
-      kullaniciIdleri = rows.map((r: any) => r.kullanici_id)
+      kullaniciIdleri = Array.isArray(rows) ? rows.map((r: any) => r.kullanici_id) : []
     }
 
+    kullaniciIdleri = [...new Set(kullaniciIdleri.filter(Boolean))]
     if (kullaniciIdleri.length === 0) return new Response("ok")
 
     const idFilter = kullaniciIdleri.map((id) => `"${id}"`).join(",")
@@ -63,32 +68,49 @@ Deno.serve(async (req) => {
       `${SUPABASE_URL}/rest/v1/push_abonelikleri?select=*&kullanici_id=in.(${idFilter})`,
       { headers: restHeaders }
     )
-    const abonelikler = await subRes.json()
+    const abonelikYaniti = await subRes.json()
+    const abonelikler = Array.isArray(abonelikYaniti) ? abonelikYaniti : []
+
+    let yayinlayan = "SVOBS"
+    if (duyuru.yayinlayan_id) {
+      const yayinlayanRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/kullanicilar?select=ad,soyad&id=eq.${duyuru.yayinlayan_id}&limit=1`,
+        { headers: restHeaders }
+      )
+      const yayinlayanlar = await yayinlayanRes.json()
+      if (Array.isArray(yayinlayanlar) && yayinlayanlar[0]) {
+        yayinlayan = `${yayinlayanlar[0].ad || ""} ${yayinlayanlar[0].soyad || ""}`.trim() || yayinlayan
+      }
+    }
 
     const bildirim = JSON.stringify({
       title: duyuru.baslik,
-      body: (duyuru.icerik || "").slice(0, 120),
-      url: "/ogrenci",
+      body: `${yayinlayan} tarafından gönderildi`,
+      duyuruId: duyuru.id,
+      url: `/ogrenci?sekme=duyurular&duyuru=${duyuru.id}`,
     })
 
-    await Promise.all(
-      abonelikler.map((a: any) =>
-        webpush
-          .sendNotification({ endpoint: a.endpoint, keys: { p256dh: a.p256dh, auth: a.auth } }, bildirim)
-          .catch(async (err: any) => {
-            if (err?.statusCode === 410 || err?.statusCode === 404) {
-              await fetch(`${SUPABASE_URL}/rest/v1/push_abonelikleri?id=eq.${a.id}`, {
-                method: "DELETE",
-                headers: restHeaders,
-              })
-            } else {
-              console.error("push gönderilemedi:", err)
-            }
+    let gonderildi = 0
+    let basarisiz = 0
+    await Promise.all(abonelikler.map(async (a: any) => {
+      try {
+        await webpush.sendNotification({ endpoint: a.endpoint, keys: { p256dh: a.p256dh, auth: a.auth } }, bildirim)
+        gonderildi++
+      } catch (err: any) {
+        basarisiz++
+        if ([400, 404, 410].includes(err?.statusCode)) {
+          await fetch(`${SUPABASE_URL}/rest/v1/push_abonelikleri?id=eq.${a.id}`, {
+            method: "DELETE",
+            headers: restHeaders,
           })
-      )
-    )
+        } else {
+          console.error("push gönderilemedi:", err)
+        }
+      }
+    }))
 
-    return new Response("ok")
+    console.log(JSON.stringify({ duyuruId: duyuru.id, hedefKullanici: kullaniciIdleri.length, abonelik: abonelikler.length, gonderildi, basarisiz }))
+    return Response.json({ ok: true, vapidPublicKey: VAPID_PUBLIC_KEY, hedefKullanici: kullaniciIdleri.length, abonelik: abonelikler.length, gonderildi, basarisiz })
   } catch (err) {
     console.error("send-duyuru-push hata:", err)
     return new Response("hata", { status: 500 })

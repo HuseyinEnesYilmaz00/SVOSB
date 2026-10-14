@@ -155,7 +155,6 @@
   }
 }
 
-
 @keyframes modal-in {
   from {
     opacity: 0;
@@ -177,268 +176,65 @@
 
 
 
-.glass-btn-primary:hover {
-  background-color: var(--tema-accent-hover);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), 0 12px 24px -4px rgba(var(--tema-accent-rgb), 0.45);
-}
-.glass-btn-primary:active {
-  transform: scale(0.96);
-}
-
-/* 2. İkincil Araç Butonları (Rapor, Yedek, Şifre, Çıkış, Pasif vb.) */
-.glass-btn-secondary {
+/* Shared controls: a single definition prevents theme and animation conflicts. */
+.glass-btn-primary, .glass-btn-secondary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #334155;
-  border-radius: 0.75rem;
-  background-color: rgba(255, 255, 255, 0.45);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.8), 0 4px 12px rgba(0, 0, 0, 0.03);
-  transition: all 0.15s ease;
+  gap: .45rem;
+  min-height: 44px;
+  padding: .6rem 1rem;
+  border-radius: .875rem;
+  font-size: .8125rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: background-color .18s ease, box-shadow .18s ease, transform .18s ease;
 }
-.glass-btn-secondary:hover {
-  background-color: rgba(255, 255, 255, 0.75);
-  border-color: rgba(255, 255, 255, 0.9);
-  color: #0f172a;
-}
-.glass-btn-secondary:active {
-  transform: scale(0.96);
-}
-
-/* 3. Ana İçerik Kartları & Tablo Çerçeveleri */
-.glass-card {
-  border-radius: 1.5rem;
-  background-color: rgba(255, 255, 255, 0.45);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.8), 0 12px 36px -8px rgba(0, 0, 0, 0.05);
-}
-
-/* ===================================================
-   LIQUID GLASS - EVRENSEL MODAL & BUTON SISTEMI
-   =================================================== */
-
-@keyframes glassFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes glassPopIn {
-  from { 
-    opacity: 0; 
-    transform: scale(0.94) translateY(10px); 
-  }
-  to { 
-    opacity: 1; 
-    transform: scale(1) translateY(0); 
-  }
-}
-
-/* Tüm Açılır Pencerelerin Arka Plan Karartması */
-
-
-/* Tüm Açılır Pencerelerin Gövdesi (Evrensel Sıvı Cam) */
-
-
-/* Birincil Zümrüt Buton (+ Öğrenci Ekle vb.) */
 .glass-btn-primary {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 0.375rem !important;
-  padding: 0.5rem 1.1rem !important;
-  font-size: 0.8125rem !important;
-  font-weight: 600 !important;
-  color: #ffffff !important;
-  border-radius: 1rem !important;
-  background-color: var(--tema-accent) !important;
-  border: 1px solid rgba(var(--tema-accent-rgb), 0.6) !important;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(var(--tema-accent-rgb), 0.25) !important;
-  transition: all 0.15s ease !important;
-  cursor: pointer !important;
-  user-select: none !important;
+  background: var(--tema-accent, #1b4332);
+  color: white;
+  border: 1px solid transparent;
+  box-shadow: 0 4px 12px -4px rgba(var(--tema-accent-rgb, 27, 67, 50), .3), inset 0 1px 0 #ffffff30;
 }
-.glass-btn-primary:hover {
-  background-color: var(--tema-accent-hover) !important;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), 0 6px 18px rgba(var(--tema-accent-rgb), 0.35) !important;
-}
-.glass-btn-primary:active {
-  transform: scale(0.96) !important;
-}
+.glass-btn-primary:hover:not(:disabled) { background: var(--tema-accent-hover, #143326); transform: translateY(-1px); }
+.glass-btn-secondary { background: #fff; color: #475569; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px #00000003; }
+.glass-btn-secondary:hover:not(:disabled) { background: #f8fafc; box-shadow: 0 3px 10px #00000008; }
+.glass-btn-primary:active:not(:disabled), .glass-btn-secondary:active:not(:disabled) { transform: scale(.98); }
+.glass-btn-primary:disabled, .glass-btn-secondary:disabled { opacity: .45; cursor: not-allowed; }
+.glass-card { background: #fff; border: 1px solid var(--border); border-radius: 1.5rem; box-shadow: 0 8px 30px -20px #1b43322a; }
+.animate-overlay { background: #16231f55; z-index: 80; }
+.animate-modal { background: #fff; border: 1px solid #ffffff90; border-radius: 1.5rem; box-shadow: 0 24px 80px -20px #12271e44; max-height: calc(100dvh - 2rem); overflow-y: auto; overscroll-behavior: contain; }
+.animate-modal input:not([type="checkbox"]):not([type="radio"]), .animate-modal select, .animate-modal textarea { min-height: 44px; }
+.workspace { background: radial-gradient(ellipse at 85% 0%, rgba(var(--tema-accent-rgb, 27, 67, 50), .045), transparent 55%), #f7f8f6; }
+.workspace-intro { background: linear-gradient(115deg, #ffffff, rgba(var(--tema-accent-rgb, 27, 67, 50), .045)); }
+.workspace-context-select { width: 100%; min-width: 0; min-height: 48px; border: 1px solid #d8e0da; border-radius: 14px; padding: .75rem 2rem .75rem .875rem; background: #ffffffdf; color: var(--foreground); font-size: 14px; font-weight: 500; box-shadow: 0 2px 5px #00000003; }
+.workspace-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 14px; color: var(--muted-foreground); transition: background-color .18s, color .18s; }
+.workspace-icon-button:hover { background: var(--muted); }
+.workspace-nav { transition: color .18s, background-color .18s; }
+.workspace :is(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.workspace button:not(:disabled) { cursor: pointer; }
+.workspace table { font-variant-numeric: tabular-nums; }
 
-/* İkincil Buzlu Cam Buton (Pasif Öğrenciler, Araçlar vb.) */
-.glass-btn-secondary {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 0.375rem !important;
-  padding: 0.45rem 0.95rem !important;
-  font-size: 0.75rem !important;
-  font-weight: 500 !important;
-  color: #1e293b !important;
-  border-radius: 0.875rem !important;
-  background-color: rgba(255, 255, 255, 0.75) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  border: 1px solid rgba(226, 232, 240, 0.9) !important;
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.9), 0 2px 8px rgba(0, 0, 0, 0.04) !important;
-  transition: all 0.15s ease !important;
-  cursor: pointer !important;
-  user-select: none !important;
+.workspace .workspace-card { border: 1px solid #e3e8e3; box-shadow: 0 4px 24px -16px #17342622; }
+.workspace .workspace-card > .workspace-card-header { background: #ffffff80; }
+@media (max-width: 639px) {
+  .workspace input:not([type="checkbox"]):not([type="radio"]), .workspace select, .workspace textarea { font-size: 16px; max-width: 100%; }
+  .workspace td, .workspace th { padding-left: .75rem; padding-right: .75rem; }
+  .workspace .workspace-card-header { align-items: stretch; }
+  .workspace .workspace-card-header > div { flex-wrap: wrap; }
 }
-.glass-btn-secondary:hover {
-  background-color: rgba(255, 255, 255, 0.95) !important;
-  border-color: rgba(203, 213, 225, 1) !important;
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 1), 0 4px 12px rgba(0, 0, 0, 0.06) !important;
-}
-.glass-btn-secondary:active {
-  transform: scale(0.96) !important;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 
-/* ===================================================
-   LIQUID GLASS - GPU HIZLANDIRMALI SIVI CAM SISTEMI
-   =================================================== */
-
-@keyframes glassFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes glassSpringPop {
-  0% { 
-    opacity: 0; 
-    transform: scale(0.94) translate3d(0, 14px, 0); 
-  }
-  100% { 
-    opacity: 1; 
-    transform: scale(1) translate3d(0, 0, 0); 
-  }
-}
-
-/* 1. Sinematik ve Hafif Karartma Tülü */
-
-
-/* 2. Gerçek Sıvı Cam Tuğla Gövdesi (GPU 60/120 FPS) */
-
-
-/* 3. Tüm Modallardaki Form Elemanları (Input, Select, Textarea) */
-.animate-modal input:not([type="checkbox"]):not([type="radio"]),
-.animate-modal select,
-.animate-modal textarea {
-  background-color: rgba(255, 255, 255, 0.70) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(226, 232, 240, 0.95) !important;
-  border-radius: 0.875rem !important;
-  padding: 0.55rem 0.85rem !important;
-  font-size: 0.8125rem !important;
-  color: #1e293b !important;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03) !important;
-  outline: none !important;
-  transition: all 0.15s ease !important;
-}
-
-.animate-modal input:focus,
-.animate-modal select:focus,
-.animate-modal textarea:focus {
-  background-color: rgba(255, 255, 255, 0.95) !important;
-  border-color: rgba(var(--tema-accent-rgb), 0.5) !important;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02), 0 0 0 3px rgba(var(--tema-accent-rgb), 0.12) !important;
-}
-
-.animate-modal input[type="checkbox"] {
-  accent-color: var(--tema-accent) !important;
-  width: 1.05rem !important;
-  height: 1.05rem !important;
-  border-radius: 0.35rem !important;
-  cursor: pointer !important;
-}
-
-/* 4. Buton Standartları */
-.glass-btn-primary {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 0.45rem !important;
-  padding: 0.55rem 1.25rem !important;
-  font-size: 0.8125rem !important;
-  font-weight: 600 !important;
-  color: #ffffff !important;
-  border-radius: 1rem !important;
-  background-color: #1b4332 !important;
-  border: 1px solid rgba(45, 106, 79, 0.6) !important;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 4px 14px rgba(27, 67, 50, 0.25) !important;
-  transition: all 0.15s ease !important;
-  cursor: pointer !important;
-  user-select: none !important;
-}
-.glass-btn-primary:hover:not(:disabled) {
-  background-color: #143326 !important;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.55), 0 6px 18px rgba(27, 67, 50, 0.35) !important;
-}
-.glass-btn-primary:active:not(:disabled) {
-  transform: scale(0.97) !important;
-}
-.glass-btn-primary:disabled {
-  opacity: 0.45 !important;
-  cursor: not-allowed !important;
-}
-
-.glass-btn-secondary {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 0.45rem !important;
-  padding: 0.5rem 1.1rem !important;
-  font-size: 0.75rem !important;
-  font-weight: 500 !important;
-  color: #1e293b !important;
-  border-radius: 0.875rem !important;
-  background-color: rgba(255, 255, 255, 0.75) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  border: 1px solid rgba(226, 232, 240, 0.95) !important;
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.9), 0 2px 8px rgba(0, 0, 0, 0.04) !important;
-  transition: all 0.15s ease !important;
-  cursor: pointer !important;
-  user-select: none !important;
-}
-.glass-btn-secondary:hover {
-  background-color: rgba(255, 255, 255, 0.95) !important;
-  border-color: rgba(203, 213, 225, 1) !important;
-}
-.glass-btn-secondary:active {
-  transform: scale(0.97) !important;
-}
-
-
-
-
-
-
-
-
-
-.animate-overlay {
-  background-color: rgba(0, 0, 0, 0.12) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-.animate-modal {
-  animation: none !important;
-  background: #ffffff !important;
-  opacity: 1 !important;
-  border: 1px solid #cbd5e1 !important;
-  border-radius: 1.5rem !important;
-  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.12) !important;
+@media (max-width: 639px) {
+  .student-roster, .student-roster tbody { display: block; }
+  .student-roster thead { display: none; }
+  .student-roster tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: .875rem 1rem; gap: .75rem; }
+  .student-roster tbody td { padding: 0; }
+  .student-roster tbody td:first-child { grid-column: 1; min-width: 0; overflow-wrap: anywhere; }
+  .student-roster tbody td:nth-child(4) { grid-column: 2; align-self: center; white-space: nowrap; }
+  .student-roster tbody td:last-child { grid-column: 1 / -1; border-top: 1px solid #f0f2f0; padding-top: .5rem; }
+  .student-roster tbody td:last-child > div { justify-content: flex-start; gap: 1.25rem; }
+  .student-roster tbody td[colspan] { display: block; padding: 1rem; }
 }

@@ -1,5 +1,5 @@
 import { PwaRegister } from "@/components/PwaRegister";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
@@ -18,10 +18,9 @@ export const metadata: Metadata = {
   title: "Siyer Öğrenci Bilgi Sistemi",
   description: "Siyer Öğrenci Bilgi Sistemi — ders programı, ödevler, notlar ve devam takibi.",
   manifest: "/manifest.json",
-  themeColor: "#ffffff",
 };
 
-export const viewport = {
+export const viewport: Viewport = {
   themeColor: "#ffffff",
 };
 
@@ -44,4 +43,3 @@ export default function RootLayout({
     </html>
   );
 }
-

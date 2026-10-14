@@ -3,6 +3,15 @@ export function programTema(programAd: string): string {
   return 'musab'
 }
 
+export function programGorunenAdi(programAd?: string | null): string {
+  if (!programAd) return ''
+
+  return programAd
+    .replace(/cagin/gi, 'Çağın')
+    .replace(/musablari/gi, 'Musabları')
+    .replace(/esmalari/gi, 'Esmaları')
+}
+
 export function temaPrimary(tema: string): string {
   if (tema === 'esma') return 'text-purple-500'
   return 'text-emerald-700'

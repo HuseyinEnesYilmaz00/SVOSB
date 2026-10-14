@@ -1,17 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { programTema } from '@/lib/tema'
+import { programGorunenAdi, programTema } from '@/lib/tema'
+import { WeeklySchedule, dateKey, fortnightDates, type ScheduleLesson, type ScheduleCancellation } from '@/components/student/weekly-schedule'
 import { StudentReportView } from '@/components/student/student-report-view'
 import { SorumlulukPaneli } from '@/app/ogrenci/sorumluluk'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   BookOpen,
   CalendarCheck,
-  FileText,
   Bell,
   Inbox,
   Camera,
@@ -27,6 +27,7 @@ import {
   MessageSquare,
   Send,
   CheckCircle2,
+  ChevronDown,
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { guncelAkademikDonem, tarihtenDonem } from '@/lib/donem'
@@ -65,6 +66,8 @@ export default function OgrenciPage() {
   const [sinif, setSinif] = useState<any>(null)
   const [program, setProgram] = useState<any>(null)
   const [duyurular, setDuyurular] = useState<any[]>([])
+  const [okunanDuyuruIdleri, setOkunanDuyuruIdleri] = useState<string[]>([])
+  const [acikDuyuruId, setAcikDuyuruId] = useState<string | null>(null)
   const [okunmamisDuyuruVar, setOkunmamisDuyuruVar] = useState(false)
   const [dersler, setDersler] = useState<any[]>([])
   const [dersSorumluluklari, setDersSorumluluklari] = useState<any[]>([])
@@ -76,7 +79,31 @@ export default function OgrenciPage() {
   const router = useRouter()
   const supabase = createClient()
 
+  const duyurulariYukle = useCallback(async (userId: string, sinifId: string, programId: string) => {
+    const sinifIdGuvenli = sinifId || '00000000-0000-0000-0000-000000000000'
+    const { data: duy, error } = await supabase
+      .from('duyurular')
+      .select('*, kullanicilar!duyurular_yayinlayan_id_fkey (ad, soyad)')
+      .eq('program_id', programId)
+      .or(`hedef_tipi.eq.tumu,hedef_sinif_id.eq.${sinifIdGuvenli},hedef_kullanici_id.eq.${userId}`)
+      .order('olusturulma_tarihi', { ascending: false })
+
+    if (error) return
+    const gelenDuyurular = duy || []
+    setDuyurular(gelenDuyurular)
+
+    const duyuruIdleri = gelenDuyurular.map((d: any) => d.id)
+    const { data: okumalar } = duyuruIdleri.length
+      ? await supabase.from('duyuru_okumalari').select('duyuru_id').eq('kullanici_id', userId).in('duyuru_id', duyuruIdleri)
+      : { data: [] }
+    const okunanlar = (okumalar || []).map((okuma: any) => okuma.duyuru_id)
+    setOkunanDuyuruIdleri(okunanlar)
+    setOkunmamisDuyuruVar(gelenDuyurular.some((d: any) => !okunanlar.includes(d.id)))
+  }, [supabase])
+
   useEffect(() => {
+    let duyuruKanali: ReturnType<typeof supabase.channel> | null = null
+    let duyurulariYenile: (() => void) | null = null
     async function yukle() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/giris'); return }
@@ -85,7 +112,6 @@ export default function OgrenciPage() {
         .from('kullanicilar').select('*').eq('id', user.id).single()
       if (!k) { router.push('/giris'); return }
       if (k.rol === 'super_admin' || k.rol === 'program_admin') { router.push('/admin'); return }
-      if (k.rol === 'ogretmen') { router.push('/ogretmen'); return }
       setKullanici(k)
 
       const { data: o } = await supabase
@@ -102,32 +128,21 @@ export default function OgrenciPage() {
       setSinif(o.siniflar)
       setProgram(o.siniflar?.programlar)
 
-      // Duyurular ve Okundu Kontrolü
-      const sinifIdGuvenli = o.siniflar?.id || '00000000-0000-0000-0000-000000000000'
-      const { data: duy } = await supabase
-        .from('duyurular')
-        .select('*, kullanicilar!duyurular_yayinlayan_id_fkey (ad, soyad)')
-        .eq('program_id', o.siniflar?.programlar?.id)
-        .or(`hedef_tipi.eq.tumu,hedef_sinif_id.eq.${sinifIdGuvenli},hedef_kullanici_id.eq.${user.id}`)
-        .order('olusturulma_tarihi', { ascending: false })
-
-      const gelenDuyurular = duy || []
-      setDuyurular(gelenDuyurular)
-
-      const sonOkumaZamani = localStorage.getItem('svobs_son_okunan_duyuru')
-      if (gelenDuyurular.length > 0) {
-        if (!sonOkumaZamani) {
-          setOkunmamisDuyuruVar(true)
-        } else {
-          const enSonDuyuruTarihi = new Date(gelenDuyurular[0].olusturulma_tarihi).getTime()
-          setOkunmamisDuyuruVar(enSonDuyuruTarihi > parseInt(sonOkumaZamani, 10))
-        }
-      }
+      // Duyurular cihaz yenilemesi beklemeden canlı güncellenir.
+      const duyuruParametresi = new URLSearchParams(window.location.search).get('duyuru')
+      if (new URLSearchParams(window.location.search).get('sekme') === 'duyurular' || duyuruParametresi) setAktifSekme('duyurular')
+      if (duyuruParametresi) setAcikDuyuruId(duyuruParametresi)
+      duyurulariYenile = () => { void duyurulariYukle(user.id, o.siniflar?.id, o.siniflar?.programlar?.id) }
+      await duyurulariYukle(user.id, o.siniflar?.id, o.siniflar?.programlar?.id)
+      duyuruKanali = supabase
+        .channel(`ogrenci-duyurular-${user.id}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'duyurular' }, duyurulariYenile)
+        .subscribe()
 
       // Ders sorumluluklari
       const { data: ds } = await supabase
         .from('ders_sorumlulari')
-        .select('*, dersler (ad)')
+        .select('*, dersler (ad, gun, saat, periyot, baslangic_tarihi)')
         .eq('ogrenci_id', o.id)
       setDersSorumluluklari(ds || [])
 
@@ -143,26 +158,18 @@ export default function OgrenciPage() {
         katildi: 100, gec: 0, izinli: 0, katilmadi: 0
       }
 
-      let tumNotlar: any[] = []
-      let tumYoklamalar: any[] = []
-
-      const dersDetaylari = await Promise.all((dersData || []).map(async (d: any) => {
-        const { data: notlar } = await supabase
-          .from('notlar')
-          .select('*')
-          .eq('ders_id', d.id)
-          .eq('ogrenci_id', o.id)
-          .order('tarih', { ascending: false })
-
-        const { data: yoklamalar } = await supabase
-          .from('yoklamalar')
-          .select('*')
-          .eq('ders_id', d.id)
-          .eq('ogrenci_id', o.id)
-          .order('tarih', { ascending: false })
-
-        if (notlar) tumNotlar.push(...notlar)
-        if (yoklamalar) tumYoklamalar.push(...yoklamalar)
+      const dersIdleri = (dersData || []).map((d: any) => d.id)
+      const [notSonuc, yoklamaSonuc] = dersIdleri.length ? await Promise.all([
+        supabase.from('notlar').select('*').eq('ogrenci_id', o.id)
+          .in('ders_id', dersIdleri).order('tarih', { ascending: false }),
+        supabase.from('yoklamalar').select('*').eq('ogrenci_id', o.id)
+          .in('ders_id', dersIdleri).order('tarih', { ascending: false }),
+      ]) : [{ data: [] }, { data: [] }]
+      const tumNotlar = notSonuc.data || []
+      const tumYoklamalar = yoklamaSonuc.data || []
+      const dersDetaylari = (dersData || []).map((d: any) => {
+        const notlar = tumNotlar.filter((n: any) => n.ders_id === d.id)
+        const yoklamalar = tumYoklamalar.filter((y: any) => y.ders_id === d.id)
 
         const sinavOrtHam = notlar && notlar.length > 0
           ? notlar.reduce((s: number, n: any) => s + n.puan, 0) / notlar.length
@@ -201,12 +208,12 @@ export default function OgrenciPage() {
           devamPuani: devamOrtHam !== null ? Number(devamOrtHam.toFixed(2)) : null,
           dersPuani: dersPuaniHam !== null ? Number(dersPuaniHam.toFixed(2)) : null,
         }
-      }))
+      })
 
       setDersler(dersDetaylari)
 
-      const genelSinavOrt = tumNotlar.length > 0 ? tumNotlar.reduce((s, n) => s + n.puan, 0) / tumNotlar.length : null
-      const genelDevamOrt = tumYoklamalar.length > 0 ? tumYoklamalar.reduce((s, y) => s + (devamPuanlari[y.durum] || 0), 0) / tumYoklamalar.length : null
+      const genelSinavOrt = tumNotlar.length > 0 ? tumNotlar.reduce((s: number, n: any) => s + n.puan, 0) / tumNotlar.length : null
+      const genelDevamOrt = tumYoklamalar.length > 0 ? tumYoklamalar.reduce((s: number, y: any) => s + (devamPuanlari[y.durum] || 0), 0) / tumYoklamalar.length : null
 
       let gercekGenelOrt = null
       if (genelSinavOrt !== null && genelDevamOrt !== null) {
@@ -221,10 +228,49 @@ export default function OgrenciPage() {
       setYukleniyor(false)
     }
     yukle()
-  }, [])
+    const odaklaninca = () => { if (document.visibilityState === 'visible') duyurulariYenile?.() }
+    const pushYenile = () => duyurulariYenile?.()
+    document.addEventListener('visibilitychange', odaklaninca)
+    window.addEventListener('focus', odaklaninca)
+    window.addEventListener('svobs:duyuru-yenile', pushYenile)
+    return () => {
+      document.removeEventListener('visibilitychange', odaklaninca)
+      window.removeEventListener('focus', odaklaninca)
+      window.removeEventListener('svobs:duyuru-yenile', pushYenile)
+      if (duyuruKanali) void supabase.removeChannel(duyuruKanali)
+    }
+  }, [duyurulariYukle, router, supabase])
 
-  function duyurulariOkunduIsaretle() {
-    localStorage.setItem('svobs_son_okunan_duyuru', Date.now().toString())
+  async function duyuruAc(d: any) {
+    const acilacak = acikDuyuruId !== d.id
+    setAcikDuyuruId(acilacak ? d.id : null)
+    if (!acilacak || okunanDuyuruIdleri.includes(d.id) || !kullanici?.id) return
+
+    const { error } = await supabase.from('duyuru_okumalari').upsert(
+      { duyuru_id: d.id, kullanici_id: kullanici.id, okundu_tarihi: new Date().toISOString() },
+      { onConflict: 'duyuru_id,kullanici_id' }
+    )
+    if (error) {
+      toast.error('Okundu bilgisi kaydedilemedi.')
+      return
+    }
+    const yeniOkunanlar = [...okunanDuyuruIdleri, d.id]
+    setOkunanDuyuruIdleri(yeniOkunanlar)
+    setOkunmamisDuyuruVar(duyurular.some((duyuru: any) => duyuru.id !== d.id && !yeniOkunanlar.includes(duyuru.id)))
+  }
+
+  async function duyurulariOkunduIsaretle() {
+    if (!kullanici?.id || duyurular.length === 0) return
+    const simdi = new Date().toISOString()
+    const { error } = await supabase.from('duyuru_okumalari').upsert(
+      duyurular.map((d: any) => ({ duyuru_id: d.id, kullanici_id: kullanici.id, okundu_tarihi: simdi })),
+      { onConflict: 'duyuru_id,kullanici_id' }
+    )
+    if (error) {
+      toast.error('Duyurular okundu olarak işaretlenemedi.')
+      return
+    }
+    setOkunanDuyuruIdleri(duyurular.map((d: any) => d.id))
     setOkunmamisDuyuruVar(false)
     toast.success('Tüm duyurular okundu sayıldı')
   }
@@ -292,11 +338,11 @@ export default function OgrenciPage() {
     <div className={`tema-${tema} min-h-svh bg-background relative`}>
       {/* Ultra Kompakt Şeffaf Üst Bar (Ekranın yerini çalmaz) */}
       <header className="px-4 py-2 flex items-center justify-between sticky top-0 z-20 bg-background/60 backdrop-blur-xl border-b border-border/40">
-        <div className="flex items-center gap-2.5">
-          <img src="/sv-logo.png" alt="Siyer Vakfı" className="w-7 h-7 object-contain brightness-0 dark:invert" />
-          <div>
-            <p className="text-xs font-semibold leading-none">{program?.ad}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{sinif?.ad}</p>
+        <div className="flex min-w-0 items-center gap-2.5 pr-2">
+          <img src="/sv-logo.png" alt="Siyer Vakfı" className="w-7 h-7 shrink-0 object-contain brightness-0 dark:invert" />
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold leading-normal">{programGorunenAdi(program?.ad)}</p>
+            <p className="truncate text-[11px] text-muted-foreground mt-0.5">{sinif?.ad}</p>
           </div>
         </div>
 
@@ -315,7 +361,8 @@ export default function OgrenciPage() {
           <button
             onClick={cikisYap}
             title="Çıkış Yap"
-            className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-all duration-200 active:scale-95"
+            aria-label="Çıkış Yap"
+            className="size-11 shrink-0 rounded-full flex items-center justify-center text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-all duration-200 active:scale-95"
           >
             <LogOut className="size-4" />
           </button>
@@ -323,14 +370,16 @@ export default function OgrenciPage() {
       </header>
 
       {/* Ana Gövde */}
-      <main className="max-w-4xl mx-auto px-4 py-5 space-y-5 has-dock">
+      <main className="max-w-4xl mx-auto px-3 pt-5 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-6 space-y-5">
         <OgrenciKatilimYildonumu ogrenci={ogrenci} />
-        <OgrenciBuHaftaOzet ogrenciId={ogrenci?.id} dersler={dersler} supabase={supabase} />
 
         <AnimatePresence mode="wait">
           <motion.div key={aktifSekme} {...gecisProps}>
             {aktifSekme === 'program' && (
-              <OgrenciDersProgrami sinifId={sinif?.id} supabase={supabase} />
+              <div className="space-y-5">
+                <OgrenciDersProgrami sinifId={sinif?.id} supabase={supabase} />
+                <OgrenciBuHaftaOzet ogrenciId={ogrenci?.id} dersler={dersler} supabase={supabase} />
+              </div>
             )}
 
             {aktifSekme === 'dersler' && (
@@ -348,7 +397,6 @@ export default function OgrenciPage() {
                 <StudentReportView
                   dersler={dersler}
                   genelOrtalama={genelOrtalama}
-                  ogrenciNo={ogrenci?.numara}
                 />
 
                 <OgrenciGelisimGrafigi ogrenciId={ogrenci?.id} supabase={supabase} accentHex={accentHex} />
@@ -382,15 +430,31 @@ export default function OgrenciPage() {
                   </div>
                 ) : (
                   <div className="divide-y divide-white/50">
-                    {duyurular.map((d) => (
-                      <div key={d.id} className="px-5 py-4">
-                        <p className="font-medium text-sm text-foreground">{d.baslik}</p>
-                        <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{d.icerik}</p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {d.kullanicilar?.ad} {d.kullanicilar?.soyad} — {new Date(d.olusturulma_tarihi).toLocaleDateString('tr-TR')}
-                        </p>
-                      </div>
-                    ))}
+                    {duyurular.map((d) => {
+                      const acik = acikDuyuruId === d.id
+                      const okundu = okunanDuyuruIdleri.includes(d.id)
+                      return (
+                        <div key={d.id} className={okundu ? 'bg-transparent' : 'bg-primary/[0.035]'}>
+                          <button type="button" onClick={() => void duyuruAc(d)} aria-expanded={acik} className="flex w-full items-center gap-3 px-5 py-4 text-left transition hover:bg-white/40">
+                            <span className={`size-2 shrink-0 rounded-full ${okundu ? 'bg-transparent' : 'bg-primary'}`} aria-label={okundu ? 'Okundu' : 'Okunmadı'} />
+                            <span className="min-w-0 flex-1">
+                              <span className={`block truncate text-sm text-foreground ${okundu ? 'font-medium' : 'font-semibold'}`}>{d.baslik}</span>
+                              <span className="mt-1 block truncate text-xs text-muted-foreground">
+                                {d.kullanicilar?.ad} {d.kullanicilar?.soyad} · {new Date(d.olusturulma_tarihi).toLocaleDateString('tr-TR')}
+                              </span>
+                            </span>
+                            <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform ${acik ? 'rotate-180' : ''}`} />
+                          </button>
+                          <AnimatePresence initial={false}>
+                            {acik && (
+                              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                                <p className="border-t border-white/50 px-9 py-4 text-sm leading-6 text-muted-foreground whitespace-pre-wrap">{d.icerik}</p>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -486,13 +550,12 @@ export default function OgrenciPage() {
                       { label: 'Ad Soyad', value: `${kullanici?.ad} ${kullanici?.soyad}` },
                       { label: 'E-posta', value: kullanici?.email },
                       { label: 'Telefon', value: kullanici?.telefon || '—' },
-                      { label: 'Öğrenci No', value: `#${ogrenci?.numara}` },
                       { label: 'Sınıf', value: sinif?.ad },
-                      { label: 'Program', value: program?.ad },
+                      { label: 'Program', value: programGorunenAdi(program?.ad) },
                     ].map((item) => (
-                      <div key={item.label} className="flex items-center justify-between px-5 py-3">
+                      <div key={item.label} className="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:justify-between sm:gap-4">
                         <span className="text-sm text-muted-foreground">{item.label}</span>
-                        <span className="text-sm font-medium text-foreground">{item.value}</span>
+                        <span className="min-w-0 break-words text-sm font-medium text-foreground sm:text-right">{item.value}</span>
                       </div>
                     ))}
                   </div>
@@ -519,18 +582,19 @@ export default function OgrenciPage() {
       </main>
 
       {/* Ekranın Altında Yüzen Sıvı Cam Navigasyon Barı */}
-      <div className="fixed bottom-5 inset-x-0 mx-auto z-50 w-[92vw] max-w-[380px] pointer-events-auto">
+      <div className="fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] inset-x-0 mx-auto z-50 w-[92vw] max-w-[380px] pointer-events-auto">
         <motion.nav
+          aria-label="Öğrenci menüsü"
           className="relative p-1.5 select-none overflow-hidden rounded-full"
           style={{
-            backgroundColor: "rgba(255, 255, 255, 0.02)",
+            backgroundColor: "rgba(255, 255, 255, 0.94)",
             backdropFilter: "blur(10px) saturate(210%) contrast(105%)",
             WebkitBackdropFilter: "blur(24px) saturate(210%) contrast(105%)",
             border: "1px solid rgba(255, 255, 255, 0.28)",
             boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.50), inset 0 -1px 1px rgba(0, 0, 0, 0.05)"
           }}
         >
-          <div className="relative flex items-center w-full h-[44px]">
+          <div className="relative flex items-center w-full h-[48px]">
             {SEKMELER.map((item) => {
               const aktif = aktifSekme === item.id;
               const Ikon = item.ikon;
@@ -540,7 +604,8 @@ export default function OgrenciPage() {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setAktifSekme(item.id)}
+                  aria-current={aktif ? 'page' : undefined}
+                  onClick={() => { setAktifSekme(item.id); window.scrollTo({ top: 0 }) }}
                   className="relative z-10 flex-1 h-full flex flex-col items-center justify-center rounded-full cursor-pointer transition-transform duration-150 active:scale-95"
                 >
                   {aktif && (
@@ -687,158 +752,42 @@ function OgrenciGeriBildirim({ supabase }: { supabase: any }) {
   )
 }
 
-function OgrenciDersProgrami({ sinifId, supabase }: { sinifId: string, supabase: any }) {
-  const [dersler, setDersler] = useState<any[]>([])
-  const [iptaller, setIptaller] = useState<any[]>([])
-  const [yukleniyor, setYukleniyor] = useState(true)
+function OgrenciDersProgrami({ sinifId, supabase }: { sinifId?: string, supabase: ReturnType<typeof createClient> }) {
+  const [lessons, setLessons] = useState<ScheduleLesson[]>([])
+  const [cancellations, setCancellations] = useState<ScheduleCancellation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
-    async function yukle() {
-      if (!sinifId) return
-      const { data } = await supabase
-        .from('dersler')
-        .select('*, ogretmen_dersleri (kullanicilar (ad, soyad))')
-        .eq('sinif_id', sinifId)
-        .eq('aktif', true)
-        .order('gun')
-      setDersler(data || [])
-
-      const dersIdleri = (data || []).map((d: any) => d.id)
-      if (dersIdleri.length > 0) {
-        const bugun = new Date()
-        const haftaBasi = new Date(bugun)
-        haftaBasi.setDate(bugun.getDate() - ((bugun.getDay() + 6) % 7))
-        const haftaBasiStr = haftaBasi.toISOString().split('T')[0]
-        const { data: ipt } = await supabase
-          .from('ders_oturumlari')
-          .select('*')
-          .in('ders_id', dersIdleri)
-          .eq('durum', 'iptal')
-          .gte('tarih', haftaBasiStr)
-        setIptaller(ipt || [])
-      }
-      setYukleniyor(false)
+    let disposed = false
+    async function load() {
+      if (!sinifId) { setLoading(false); return }
+      setLoading(true)
+      setError(false)
+      const { data, error: lessonError } = await supabase.from('dersler')
+        .select('id, ad, gun, saat, periyot, baslangic_tarihi, ogretmen_adi')
+        .eq('sinif_id', sinifId).eq('aktif', true)
+      if (disposed) return
+      if (lessonError) { setError(true); setLoading(false); return }
+      const rows = (data || []) as unknown as ScheduleLesson[]
+      const dates = fortnightDates(new Date())
+      const result = rows.length ? await supabase.from('ders_oturumlari').select('ders_id, tarih')
+        .in('ders_id', rows.map(row => row.id)).eq('durum', 'iptal')
+        .gte('tarih', dateKey(dates[0])).lte('tarih', dateKey(dates[13])) : { data: [], error: null }
+      if (disposed) return
+      setLessons(rows)
+      setCancellations(result.data || [])
+      setError(!!result.error)
+      setLoading(false)
     }
-    yukle()
-  }, [sinifId])
+    void load()
+    return () => { disposed = true }
+  }, [sinifId, supabase, attempt])
 
-  const gunler = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar']
-
-  function dersbuHaftaVarMi(ders: any): boolean {
-    if (ders.periyot === 'haftalik') return true
-    if (!ders.baslangic_tarihi) return true
-    const bugun = new Date()
-    const baslangic = new Date(ders.baslangic_tarihi)
-    const buHaftaBasi = new Date(bugun)
-    buHaftaBasi.setDate(bugun.getDate() - ((bugun.getDay() + 6) % 7))
-    buHaftaBasi.setHours(0, 0, 0, 0)
-    const baslangicHaftaBasi = new Date(baslangic)
-    baslangicHaftaBasi.setDate(baslangic.getDate() - ((baslangic.getDay() + 6) % 7))
-    baslangicHaftaBasi.setHours(0, 0, 0, 0)
-    const farkHafta = Math.round((buHaftaBasi.getTime() - baslangicHaftaBasi.getTime()) / (7 * 24 * 60 * 60 * 1000))
-    if (farkHafta < 0) return false
-    switch (ders.periyot) {
-      case '2haftada1': return farkHafta % 2 === 0
-      case '3haftada1': return farkHafta % 3 === 0
-      case 'ayda1': return farkHafta % 4 === 0
-      default: return true
-    }
-  }
-
-  if (yukleniyor) return null
-
-  const gunlereGore = gunler.map(gun => ({
-    gun,
-    dersler: dersler.filter(d => d.gun === gun)
-  })).filter(g => g.dersler.length > 0)
-
-  if (gunlereGore.length === 0) return null
-
-  return (
-    <div className={glass.card}>
-      <div className="px-5 py-4 border-b border-white/50">
-        <h2 className="font-medium text-sm text-foreground">Haftalık Ders Programı</h2>
-      </div>
-
-      {/* Mobil: günler alt alta liste */}
-      <div className="sm:hidden divide-y divide-white/50">
-        {gunlereGore.map(({ gun, dersler: gunDersleri }) => (
-          <div key={gun} className="px-4 py-3">
-            <p className="text-xs font-semibold text-muted-foreground mb-2">{gun}</p>
-            <div className="space-y-1.5">
-              {gunDersleri
-                .slice()
-                .sort((a: any, b: any) => (a.saat || '').localeCompare(b.saat || ''))
-                .map((d: any) => {
-                  const iptal = iptaller.find(i => i.ders_id === d.id)
-                  const buHafta = dersbuHaftaVarMi(d)
-                  return (
-                    <div
-                      key={d.id}
-                      className={`rounded-lg px-3 py-2 text-sm backdrop-blur-sm flex items-center justify-between gap-2 ${
-                        iptal
-                          ? 'bg-destructive/10 text-destructive border border-destructive/20'
-                          : !buHafta
-                          ? 'bg-muted/60 text-muted-foreground border border-white/50 opacity-60'
-                          : 'bg-primary/10 text-primary border border-primary/20'
-                      }`}
-                    >
-                      <div>
-                        <p className="font-medium leading-tight">{d.ad}</p>
-                        <p className="opacity-70 text-xs mt-0.5">{d.saat}</p>
-                      </div>
-                      {iptal && <span className="text-xs font-medium shrink-0">İptal</span>}
-                      {!buHafta && !iptal && <span className="text-xs shrink-0">Bu hafta yok</span>}
-                    </div>
-                  )
-                })}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Masaüstü: 7 sütunlu tablo */}
-      <div className="hidden sm:block overflow-x-auto">
-        <div className="grid grid-cols-7 min-w-[600px]">
-          {gunler.map(gun => (
-            <div key={gun} className="px-2 py-2 border-b border-r border-white/50 bg-white/30 last:border-r-0">
-              <p className="text-xs font-medium text-muted-foreground text-center">{gun.slice(0, 3)}</p>
-            </div>
-          ))}
-          {gunler.map(gun => {
-            const gunDersleri = dersler
-              .filter(d => d.gun === gun)
-              .sort((a: any, b: any) => (a.saat || '').localeCompare(b.saat || ''))
-            return (
-              <div key={gun} className="border-r border-white/50 last:border-r-0 min-h-[120px] p-1.5 space-y-1">
-                {gunDersleri.map((d: any) => {
-                  const iptal = iptaller.find(i => i.ders_id === d.id)
-                  const buHafta = dersbuHaftaVarMi(d)
-                  return (
-                    <div
-                      key={d.id}
-                      className={`rounded-md px-2 py-1.5 text-xs backdrop-blur-sm ${
-                        iptal
-                          ? 'bg-destructive/10 text-destructive border border-destructive/20'
-                          : !buHafta
-                          ? 'bg-muted/60 text-muted-foreground border border-white/50 opacity-50'
-                          : 'bg-primary/10 text-primary border border-primary/20'
-                      }`}
-                    >
-                      <p className="font-medium leading-tight">{d.ad}</p>
-                      <p className="opacity-70 mt-0.5">{d.saat}</p>
-                      {iptal && <p className="font-medium mt-0.5">İptal</p>}
-                      {!buHafta && !iptal && <p className="mt-0.5">Bu hafta yok</p>}
-                    </div>
-                  )
-                })}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
+  if (loading) return <div role="status" className="rounded-3xl border border-border bg-white p-6 text-sm text-muted-foreground">Ders programın yükleniyor…</div>
+  if (error) return <div role="alert" className="rounded-3xl border border-border bg-white p-6"><p className="text-sm">Ders programı yüklenemedi. Lütfen tekrar dene.</p><button className="mt-3 min-h-11 rounded-xl bg-primary px-4 text-sm text-primary-foreground" onClick={() => setAttempt(value => value + 1)}>Tekrar dene</button></div>
+  return <WeeklySchedule lessons={lessons} cancellations={cancellations} />
 }
 
 function OgrenciOdevlerim({ ogrenciId, dersler, supabase }: { ogrenciId: string, dersler: any[], supabase: any }) {
@@ -1113,38 +1062,15 @@ function OgrenciBuHaftaOzet({ ogrenciId, dersler, supabase }: { ogrenciId: strin
     yukle()
   }, [ogrenciId, dersler])
 
-  const gunler = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi']
-  const bugunGunAdi = gunler[new Date().getDay()]
-  const yarinGunAdi = gunler[(new Date().getDay() + 1) % 7]
-  const bugunDersleri = dersler.filter((d: any) => d.gun === bugunGunAdi)
-  const yarinDersleri = dersler.filter((d: any) => d.gun === yarinGunAdi)
-
-  if (yukleniyor) return null
-  if (bugunDersleri.length === 0 && yarinDersleri.length === 0 && yaklasanOdevler.length === 0) return null
+  if (yukleniyor || yaklasanOdevler.length === 0) return null
 
   return (
     <div className={glass.card}>
       <div className="flex items-center gap-2 px-5 py-4 border-b border-white/50">
         <Sparkles className="size-4 text-muted-foreground" />
-        <h2 className="font-medium text-sm text-foreground">Bu Hafta Ne Var?</h2>
+        <h2 className="font-medium text-sm text-foreground">Yaklaşan ödevler</h2>
       </div>
       <div className="px-5 py-4 space-y-3">
-        {bugunDersleri.length > 0 && (
-          <div>
-            <p className="text-xs font-medium text-muted-foreground mb-1">Bugün</p>
-            {bugunDersleri.map((d: any) => (
-              <p key={d.id} className="text-sm text-foreground">{d.ad} — {d.saat}</p>
-            ))}
-          </div>
-        )}
-        {yarinDersleri.length > 0 && (
-          <div>
-            <p className="text-xs font-medium text-muted-foreground mb-1">Yarın</p>
-            {yarinDersleri.map((d: any) => (
-              <p key={d.id} className="text-sm text-foreground">{d.ad} — {d.saat}</p>
-            ))}
-          </div>
-        )}
         {yaklasanOdevler.length > 0 && (
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1">Yaklaşan Ödev Teslimi</p>

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
+import { epostaGondericisi } from '@/lib/email'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const feedbackRecipient = process.env.FEEDBACK_RECIPIENT_EMAIL
@@ -33,8 +34,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ hata: 'Oturum doğrulanamadı' }, { status: 401 })
     }
 
-    await resend.emails.send({
-      from: 'Siyer Vakfı Öğrenci Bilgi Sistemi <bildirim@mail.enesinsanaldefteri.com.tr>',
+    const { error: mailError } = await resend.emails.send({
+      from: epostaGondericisi,
       to: feedbackRecipient,
       replyTo: user.email,
       subject: `Yeni Geri Bildirim — ${sayfa || 'bilinmiyor'}`,
@@ -46,8 +47,9 @@ export async function POST(request: Request) {
       ].join('\n'),
     })
 
+    if (mailError) return NextResponse.json({ hata: 'Mail gönderilemedi' }, { status: 502 })
     return NextResponse.json({ basarili: true })
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('geri-bildirim mail hatası:', err)
     return NextResponse.json({ hata: 'Mail gönderilemedi' }, { status: 500 })
   }
