@@ -26,7 +26,7 @@ export function createServerSupabaseClient(cookieStore: CookieStore) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
         } catch {
-          // Ignore server-component write failures; middleware refreshes the session.
+          // Server Components cannot write cookies; route handlers persist refreshes.
         }
       },
     },

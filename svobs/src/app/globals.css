@@ -74,6 +74,9 @@
   --primary: oklch(0.35 0.08 155);
   --primary-foreground: oklch(0.985 0.008 95);
   --ring: oklch(0.35 0.08 155);
+  --tema-accent: #1b4332;
+  --tema-accent-hover: #143326;
+  --tema-accent-rgb: 27, 67, 50;
 }
 
 /* Esma teması */
@@ -81,6 +84,34 @@
   --primary: oklch(0.45 0.16 5);
   --primary-foreground: oklch(0.985 0.008 95);
   --ring: oklch(0.45 0.16 5);
+  --tema-accent: #a53860;
+  --tema-accent-hover: #8f2f52;
+  --tema-accent-rgb: 165, 56, 96;
+}
+
+/* Esma programinda ortak yesil utility renkleri de program rengine uyar. */
+.tema-esma .text-green-600,
+.tema-esma .text-green-700,
+.tema-esma .text-emerald-600,
+.tema-esma .text-emerald-700 {
+  color: var(--tema-accent) !important;
+}
+
+.tema-esma .hover\:text-green-800:hover,
+.tema-esma .hover\:text-emerald-800:hover {
+  color: var(--tema-accent-hover) !important;
+}
+
+.tema-esma .bg-green-100,
+.tema-esma .bg-emerald-50,
+.tema-esma .bg-emerald-600 {
+  background-color: rgba(var(--tema-accent-rgb), 0.1) !important;
+}
+
+.tema-esma .border-green-300,
+.tema-esma .border-emerald-100,
+.tema-esma .border-emerald-600 {
+  border-color: rgba(var(--tema-accent-rgb), 0.25) !important;
 }
 
 /* Bunu .tema-esma { ... } bloğunun hemen altına yapıştır dostum */
@@ -124,7 +155,6 @@
   }
 }
 
-
 @keyframes modal-in {
   from {
     opacity: 0;
@@ -141,10 +171,70 @@
   to { opacity: 1; }
 }
 
-.animate-overlay {
-  animation: overlay-in 0.2s ease-out;
+
+
+
+
+
+/* Shared controls: a single definition prevents theme and animation conflicts. */
+.glass-btn-primary, .glass-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+  min-height: 44px;
+  padding: .6rem 1rem;
+  border-radius: .875rem;
+  font-size: .8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.glass-btn-primary {
+  background: var(--tema-accent, #1b4332);
+  color: white;
+  border: 1px solid transparent;
+  box-shadow: 0 4px 12px -4px rgba(var(--tema-accent-rgb, 27, 67, 50), .3), inset 0 1px 0 #ffffff30;
+}
+.glass-btn-primary:hover:not(:disabled) { background: var(--tema-accent-hover, #143326); transform: translateY(-1px); }
+.glass-btn-secondary { background: #fff; color: #475569; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px #00000003; }
+.glass-btn-secondary:hover:not(:disabled) { background: #f8fafc; box-shadow: 0 3px 10px #00000008; }
+.glass-btn-primary:active:not(:disabled), .glass-btn-secondary:active:not(:disabled) { transform: scale(.98); }
+.glass-btn-primary:disabled, .glass-btn-secondary:disabled { opacity: .45; cursor: not-allowed; }
+.glass-card { background: #fff; border: 1px solid var(--border); border-radius: 1.5rem; box-shadow: 0 8px 30px -20px #1b43322a; }
+.animate-overlay { background: #16231f55; z-index: 80; }
+.animate-modal { background: #fff; border: 1px solid #ffffff90; border-radius: 1.5rem; box-shadow: 0 24px 80px -20px #12271e44; max-height: calc(100dvh - 2rem); overflow-y: auto; overscroll-behavior: contain; }
+.animate-modal input:not([type="checkbox"]):not([type="radio"]), .animate-modal select, .animate-modal textarea { min-height: 44px; }
+.workspace { background: radial-gradient(ellipse at 85% 0%, rgba(var(--tema-accent-rgb, 27, 67, 50), .045), transparent 55%), #f7f8f6; }
+.workspace-intro { background: linear-gradient(115deg, #ffffff, rgba(var(--tema-accent-rgb, 27, 67, 50), .045)); }
+.workspace-context-select { width: 100%; min-width: 0; min-height: 48px; border: 1px solid #d8e0da; border-radius: 14px; padding: .75rem 2rem .75rem .875rem; background: #ffffffdf; color: var(--foreground); font-size: 14px; font-weight: 500; box-shadow: 0 2px 5px #00000003; }
+.workspace-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 14px; color: var(--muted-foreground); transition: background-color .18s, color .18s; }
+.workspace-icon-button:hover { background: var(--muted); }
+.workspace-nav { transition: color .18s, background-color .18s; }
+.workspace :is(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.workspace button:not(:disabled) { cursor: pointer; }
+.workspace table { font-variant-numeric: tabular-nums; }
+
+.workspace .workspace-card { border: 1px solid #e3e8e3; box-shadow: 0 4px 24px -16px #17342622; }
+.workspace .workspace-card > .workspace-card-header { background: #ffffff80; }
+@media (max-width: 639px) {
+  .workspace input:not([type="checkbox"]):not([type="radio"]), .workspace select, .workspace textarea { font-size: 16px; max-width: 100%; }
+  .workspace td, .workspace th { padding-left: .75rem; padding-right: .75rem; }
+  .workspace .workspace-card-header { align-items: stretch; }
+  .workspace .workspace-card-header > div { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 
-.animate-modal {
-  animation: modal-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+@media (max-width: 639px) {
+  .student-roster, .student-roster tbody { display: block; }
+  .student-roster thead { display: none; }
+  .student-roster tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: .875rem 1rem; gap: .75rem; }
+  .student-roster tbody td { padding: 0; }
+  .student-roster tbody td:first-child { grid-column: 1; min-width: 0; overflow-wrap: anywhere; }
+  .student-roster tbody td:nth-child(4) { grid-column: 2; align-self: center; white-space: nowrap; }
+  .student-roster tbody td:last-child { grid-column: 1 / -1; border-top: 1px solid #f0f2f0; padding-top: .5rem; }
+  .student-roster tbody td:last-child > div { justify-content: flex-start; gap: 1.25rem; }
+  .student-roster tbody td[colspan] { display: block; padding: 1rem; }
 }

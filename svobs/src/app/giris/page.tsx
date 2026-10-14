@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
@@ -16,12 +16,28 @@ export default function GirisPage() {
   const router = useRouter()
   const supabase = createClient()
 
+  useEffect(() => {
+    let aktif = true
+    async function mevcutOturumuAc() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!aktif || !session?.user) return
+      const { data: kullanici } = await supabase.from('kullanicilar').select('rol').eq('id', session.user.id).single()
+      if (!aktif || !kullanici) return
+      if (kullanici.rol === 'super_admin' || kullanici.rol === 'program_admin') router.replace('/admin')
+      if (kullanici.rol === 'ogrenci') router.replace('/ogrenci')
+    }
+    void mevcutOturumuAc()
+    return () => { aktif = false }
+  }, [router, supabase])
+
   async function girisYap() {
+    if (yukleniyor) return
     setYukleniyor(true)
     setHata('')
 
+    try {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password: sifre,
     })
 
@@ -31,32 +47,45 @@ export default function GirisPage() {
       return
     }
 
-    const { data: kullanici } = await supabase
+    const { data: kullanici, error: kullaniciHata } = await supabase
       .from('kullanicilar')
       .select('rol')
       .eq('id', data.user.id)
       .single()
 
+    if (kullaniciHata || !kullanici) {
+      await supabase.auth.signOut()
+      setHata(kullaniciHata?.message || 'Hesap yetkilendirme kaydı bulunamadı.')
+      setYukleniyor(false)
+      return
+    }
+
     if (kullanici?.rol === 'super_admin' || kullanici?.rol === 'program_admin') {
       router.push('/admin')
-    } else if (kullanici?.rol === 'ogretmen') {
-      router.push('/ogretmen')
-    } else {
+    } else if (kullanici.rol === 'ogrenci') {
       // Öğrenci - aktif mi kontrol et
-      const { data: ogrenciKaydi } = await supabase
+      const { data: ogrenciKaydi, error: ogrenciHata } = await supabase
         .from('ogrenciler')
         .select('aktif')
         .eq('kullanici_id', data.user.id)
         .single()
 
-      if (ogrenciKaydi && ogrenciKaydi.aktif === false) {
+      if (ogrenciHata || !ogrenciKaydi || ogrenciKaydi.aktif === false) {
         await supabase.auth.signOut()
-        setHata('Hesabınız pasife alınmış. Lütfen öğretmeninizle iletişime geçin.')
+        setHata('Hesabınız pasife alınmış. Lütfen program yöneticinizle iletişime geçin.')
         setYukleniyor(false)
         return
       }
 
       router.push('/ogrenci')
+    } else {
+      await supabase.auth.signOut()
+      setHata('Hesap rolü geçersiz. Yöneticinizle iletişime geçin.')
+    }
+    } catch {
+      setHata('Giriş sırasında bağlantı hatası oluştu. Lütfen tekrar deneyin.')
+    } finally {
+      setYukleniyor(false)
     }
   }
 
@@ -102,7 +131,7 @@ export default function GirisPage() {
                 value={sifre}
                 onChange={(e) => setSifre(e.target.value)}
                 placeholder="••••••••"
-                onKeyDown={(e) => e.key === 'Enter' && girisYap()}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !yukleniyor) void girisYap() }}
                 autoComplete="current-password"
               />
             </div>
@@ -131,8 +160,8 @@ export default function GirisPage() {
         </Card>
 
         <p className="text-xs text-muted-foreground text-center mt-6">
-          Giriş bilgileriniz programınızın öğretmeni tarafından oluşturulur.
-          Sorun yaşıyorsanız öğretmeninizle iletişime geçin.
+          Giriş bilgileriniz program yönetimi tarafından oluşturulur.
+          Sorun yaşıyorsanız program yöneticinizle iletişime geçin.
         </p>
       </div>
     </main>

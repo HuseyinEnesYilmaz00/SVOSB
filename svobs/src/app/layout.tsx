@@ -1,5 +1,5 @@
 import { PwaRegister } from "@/components/PwaRegister";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
@@ -17,11 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Siyer Öğrenci Bilgi Sistemi",
   description: "Siyer Öğrenci Bilgi Sistemi — ders programı, ödevler, notlar ve devam takibi.",
-  manifest: "/manifest.json", // <-- 1. BURASI EKLENDİ
+  manifest: "/manifest.json",
 };
 
-export const viewport = {
-  themeColor: "#344e41", // Üst bar rengi için
+export const viewport: Viewport = {
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
@@ -35,11 +35,11 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <PwaRegister /> {/* <-- 2. BURASI EKLENDİ */}
+        <div className="ambient-glow" />
+        <PwaRegister />
         {children}
         <Toaster position="top-center" richColors />
       </body>
     </html>
   );
 }
-

@@ -5,15 +5,15 @@ export const ui = {
   page: 'min-h-screen bg-stone-50',
   
   // Kartlar
-  card: 'bg-white rounded-2xl border border-gray-100 shadow-sm',
-  cardHeader: 'px-6 py-4 border-b border-gray-50 flex items-center justify-between',
+  card: 'workspace-card bg-white rounded-2xl border border-gray-100 shadow-sm',
+  cardHeader: 'workspace-card-header px-4 sm:px-6 py-4 border-b border-gray-100 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
   cardTitle: 'text-sm font-semibold text-gray-900',
   cardBody: 'divide-y divide-gray-50',
   cardEmpty: 'px-6 py-16 text-center text-sm text-gray-400',
   
   // Tablolar
   tableHead: 'px-6 py-3 text-left bg-gray-50/80',
-  tableHeadCell: 'text-xs font-medium text-gray-400 uppercase tracking-wider',
+  tableHeadCell: 'text-[11px] font-semibold text-gray-500 uppercase tracking-wider',
   tableRow: 'border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted',
   tableCell: 'p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0',
   tableCellMuted: 'p-2 align-middle whitespace-nowrap text-gray-400 [&:has([role=checkbox])]:pr-0',
@@ -41,13 +41,13 @@ export const ui = {
       : 'bg-emerald-700 hover:bg-emerald-800 shadow-sm shadow-emerald-200'
   }`,
   btnSecondary: 'inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 transition-all active:scale-95',
-  btnDanger: 'text-xs text-red-400 hover:text-red-600 transition-colors',
-  btnGhost: 'text-xs text-gray-400 hover:text-gray-600 transition-colors',
+  btnDanger: 'min-h-11 inline-flex items-center text-xs text-red-400 hover:text-red-600 transition-colors',
+  btnGhost: 'min-h-11 inline-flex items-center text-xs text-gray-400 hover:text-gray-600 transition-colors',
   
   // Input'lar
-  input: 'w-full h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/10 transition-all',
-  inputEsma: 'w-full h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-purple-400 focus:bg-white focus:ring-2 focus:ring-purple-400/10 transition-all',
-  select: 'h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 transition-all',
+  input: 'w-full min-h-11 min-w-0 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all',
+  inputEsma: 'w-full min-h-11 min-w-0 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-purple-400 focus:bg-white focus:ring-2 focus:ring-purple-400/10 transition-all',
+  select: 'min-h-11 min-w-0 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all',
   
   // Badge'ler
   badgeGreen: 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-100',
